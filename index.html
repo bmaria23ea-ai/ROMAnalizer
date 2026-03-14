@@ -810,19 +810,14 @@ const COLORS = {
 };
 
 function onResults(results) {
-  ctx.save();
   ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-  // Mirror canvas to match mirrored video
-  ctx.translate(cvs.width, 0);
-  ctx.scale(-1, 1);
 
   const lm = results.poseLandmarks;
   if (lm && lm.length > 0) {
     detecting = true;
     setStatus('on', 'Detectando');
 
-    // Draw skeleton — green connections like Python
+    // Draw skeleton — canvas already mirrored by CSS, no JS transform needed
     if (window.drawConnectors && window.POSE_CONNECTIONS) {
       drawConnectors(ctx, lm, POSE_CONNECTIONS, {
         color: 'rgba(30,60,200,0.8)', lineWidth: 3
@@ -834,8 +829,6 @@ function onResults(results) {
         radius: 5
       });
     }
-
-    ctx.restore();
 
     // Landmark indices
     const IDX = {
@@ -884,13 +877,10 @@ function onResults(results) {
   } else {
     detecting = false;
     setStatus('warn', 'Sin persona');
-    ctx.restore();
-    ctx.save();
     ctx.fillStyle = 'rgba(255,68,102,0.85)';
     ctx.font = 'bold 15px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('⚠ NO SE DETECTA PERSONA', cvs.width / 2, 36);
-    ctx.restore();
   }
 }
 
