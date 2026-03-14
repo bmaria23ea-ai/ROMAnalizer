@@ -699,10 +699,10 @@ function onResults(res){
     const L={sh:11,el:13,wr:15,hip:23,kn:25,an:27,fi:31};
     const R={sh:12,el:14,wr:16,hip:24,kn:26,an:28,fi:32};
 
-    // MediaPipe recibe video crudo → R_ = derecho anatómico del paciente
+    // L_ = derecho anatómico del paciente (confirmado funciona con esta config)
     const map={
-      derecho:   {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
-      izquierdo: {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
+      derecho:   {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
+      izquierdo: {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
     };
 
     for(const side of SIDES){
