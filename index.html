@@ -94,7 +94,7 @@ input, textarea { font-family: var(--head); outline: none; }
   object-fit: cover;
 }
 #vid { transform: scaleX(-1); }
-#cvs { transform: scaleX(-1); background: transparent; }
+#cvs { background: transparent; }
 
 /* ANGLE PANEL — overlay at bottom of camera */
 .angle-panel {
@@ -817,8 +817,11 @@ function onResults(results) {
     detecting = true;
     setStatus('on', 'Detectando');
 
-    // Draw skeleton — canvas already mirrored by CSS, no JS transform needed
+    // Draw skeleton — mirror transform only for drawing, so points match mirrored video
     if (window.drawConnectors && window.POSE_CONNECTIONS) {
+      ctx.save();
+      ctx.translate(cvs.width, 0);
+      ctx.scale(-1, 1);
       drawConnectors(ctx, lm, POSE_CONNECTIONS, {
         color: 'rgba(30,60,200,0.8)', lineWidth: 3
       });
@@ -828,6 +831,7 @@ function onResults(results) {
         lineWidth: 1,
         radius: 5
       });
+      ctx.restore();
     }
 
     // Landmark indices
