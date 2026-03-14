@@ -842,8 +842,11 @@ function onResults(results) {
     };
 
     const sides_lm = {
-      derecho:   { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
-      izquierdo: { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
+      // En web MediaPipe ve video sin espejo, entonces:
+      // derecho anatómico del paciente = landmarks RIGHT (12,14,16...)
+      // izquierdo anatómico del paciente = landmarks LEFT (11,13,15...)
+      derecho:   { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
+      izquierdo: { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
     };
 
     for (const side of SIDES) {
