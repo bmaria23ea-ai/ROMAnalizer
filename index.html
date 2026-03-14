@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ROMAnalyzer</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
 <style>
 :root {
   --bg:#07080f;--bg1:#0c0f1a;--bg2:#111525;--bg3:#161c30;
@@ -811,20 +810,32 @@ const COLORS = {
 };
 
 function onResults(results) {
-  cvs.width  = cvs.offsetWidth;
-  cvs.height = cvs.offsetHeight;
+  ctx.save();
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
+  // Mirror canvas to match mirrored video
+  ctx.translate(cvs.width, 0);
+  ctx.scale(-1, 1);
+
   const lm = results.poseLandmarks;
-  if (lm) {
+  if (lm && lm.length > 0) {
     detecting = true;
     setStatus('on', 'Detectando');
 
-    // Draw skeleton
+    // Draw skeleton — green connections like Python
     if (window.drawConnectors && window.POSE_CONNECTIONS) {
-      drawConnectors(ctx, lm, POSE_CONNECTIONS, { color: 'rgba(0,229,204,0.6)', lineWidth: 2 });
-      drawLandmarks(ctx, lm, { color: '#00e5cc', lineWidth: 1, radius: 3 });
+      drawConnectors(ctx, lm, POSE_CONNECTIONS, {
+        color: 'rgba(30,60,200,0.8)', lineWidth: 3
+      });
+      drawLandmarks(ctx, lm, {
+        color: '#00e5cc',
+        fillColor: '#00e5cc',
+        lineWidth: 1,
+        radius: 5
+      });
     }
+
+    ctx.restore();
 
     // Landmark indices
     const IDX = {
@@ -833,7 +844,6 @@ function onResults(results) {
       l_fi:31, r_fi:32
     };
 
-    // "derecho" = patient's right = camera LEFT (mirrored view)
     const sides_lm = {
       derecho:   { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
       izquierdo: { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
@@ -841,8 +851,8 @@ function onResults(results) {
 
     for (const side of SIDES) {
       const { sh, el, wr, hip, kn, an, fi } = sides_lm[side];
-      const visSup = Math.min(sh.visibility, el.visibility, wr.visibility);
-      const visInf = Math.min(hip.visibility, kn.visibility, an.visibility);
+      const visSup = Math.min(sh.visibility||0, el.visibility||0, wr.visibility||0);
+      const visInf = Math.min(hip.visibility||0, kn.visibility||0, an.visibility||0);
 
       if (visSup >= MIN_VISIBILITY) {
         const [exS, angS] = analyzeShoulder(sh, el, hip);
@@ -874,44 +884,94 @@ function onResults(results) {
   } else {
     detecting = false;
     setStatus('warn', 'Sin persona');
+    ctx.restore();
     ctx.save();
-    ctx.fillStyle = 'rgba(255,68,102,0.7)';
-    ctx.font = 'bold 14px JetBrains Mono';
+    ctx.fillStyle = 'rgba(255,68,102,0.85)';
+    ctx.font = 'bold 15px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('⚠ NO SE DETECTA PERSONA', cvs.width / 2, 32);
+    ctx.fillText('⚠ NO SE DETECTA PERSONA', cvs.width / 2, 36);
     ctx.restore();
   }
 }
 
+let poseInstance = null;
+let rafId = null;
+let cameraRunning = false;
+
 async function initMediaPipe() {
   setLdMsg('Cargando modelo de pose...');
   try {
-    const pose = new Pose({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    poseInstance = new Pose({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
     });
-    pose.setOptions({
+
+    poseInstance.setOptions({
       modelComplexity: 1,
       smoothLandmarks: true,
       enableSegmentation: false,
+      smoothSegmentation: false,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
     });
-    pose.onResults(onResults);
+
+    poseInstance.onResults(onResults);
+
+    // Initialize model (forces WASM download)
+    setLdMsg('Inicializando modelo WASM...');
+    await poseInstance.initialize();
 
     setLdMsg('Activando cámara...');
-    const camera = new Camera(vid, {
-      onFrame: async () => { await pose.send({ image: vid }); },
-      width: 640, height: 480
-    });
-    await camera.start();
-    poseReady = true;
-    document.getElementById('loading').style.opacity = '0';
-    setTimeout(() => document.getElementById('loading').style.display = 'none', 400);
-    setStatus('on', 'Detectando');
+    await startCamera();
+
   } catch (err) {
-    setLdMsg('Error: ' + err.message);
+    setLdMsg('Error: ' + err.message + ' — Recarga la página');
     console.error(err);
   }
+}
+
+async function startCamera() {
+  // Try back camera first on mobile, fallback to any
+  const constraints = [
+    { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } },
+    { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
+    { video: true }
+  ];
+
+  let stream = null;
+  for (const c of constraints) {
+    try { stream = await navigator.mediaDevices.getUserMedia(c); break; }
+    catch (e) { console.warn('Camera constraint failed:', c, e); }
+  }
+
+  if (!stream) throw new Error('No se pudo acceder a la cámara');
+
+  vid.srcObject = stream;
+  await new Promise(resolve => { vid.onloadedmetadata = resolve; });
+  await vid.play();
+
+  cameraRunning = true;
+  poseReady = true;
+
+  document.getElementById('loading').style.opacity = '0';
+  setTimeout(() => document.getElementById('loading').style.display = 'none', 400);
+  setStatus('warn', 'Buscando...');
+
+  // Manual RAF loop — more reliable than Camera utility on mobile
+  async function loop() {
+    if (!cameraRunning) return;
+    if (vid.readyState >= 2) {
+      // Sync canvas size to video
+      if (cvs.width !== vid.videoWidth || cvs.height !== vid.videoHeight) {
+        cvs.width  = vid.videoWidth  || 640;
+        cvs.height = vid.videoHeight || 480;
+      }
+      try {
+        await poseInstance.send({ image: vid });
+      } catch (e) { /* ignore single frame errors */ }
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  loop();
 }
 
 function setLdMsg(msg) { document.getElementById('ld-msg').textContent = msg; }
