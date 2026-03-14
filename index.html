@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ROMAnalyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<style>
+:root {
+  --bg:#07080f;--bg1:#0c0f1a;--bg2:#111525;--bg3:#161c30;
+  --line:#1c2640;--line2:#243050;
+  --cyan:#00e5cc;--cyan2:#00b8a4;--cyan-d:rgba(0,229,204,.10);
+  --blue:#4db8ff;--blue-d:rgba(77,184,255,.10);
+  --red:#ff4466;--red-d:rgba(255,68,102,.12);
+  --green:#39d353;--green-d:rgba(57,211,83,.10);
+  --orange:#ff8c42;--orange-d:rgba(255,140,66,.10);
+  --purple:#b985ff;--purple-d:rgba(185,133,255,.10);
+  --txt:#b8cfe8;--txt2:#6a88aa;--txt3:#384e68;
+  --mono:'JetBrains Mono',monospace;
+  --head:'Syne',sans-serif;
+  --nav-h:62px;--hd-h:50px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--txt); font-family: var(--head); font-size: 13px; }
+button { font-family: var(--head); cursor: pointer; border: none; outline: none; }
+input, textarea { font-family: var(--head); outline: none; }
+
+/* ── SCREENS ── */
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+.screen.hidden { display: none !important; }
+
+/* ── HEADER ── */
+.hd {
+  flex-shrink: 0; height: var(--hd-h);
+  background: var(--bg1); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 14px; gap: 10px;
+  z-index: 10;
+}
+.logo-mark {
+  width: 30px; height: 30px; background: linear-gradient(135deg,var(--cyan),var(--blue));
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; box-shadow: 0 0 14px rgba(0,229,204,.3);
+}
+.logo-mark svg { width: 15px; height: 15px; }
+.logo-name { font-size: 14px; font-weight: 700; letter-spacing: -.4px; color: #fff; }
+.logo-tag { font-size: 8px; color: var(--txt3); font-family: var(--mono); letter-spacing: 1.5px; text-transform: uppercase; }
+.hd-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.chip {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 9px; padding: 4px 9px;
+  border-radius: 99px; border: 1px solid var(--line2);
+  color: var(--txt2); background: var(--bg2);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--txt3); flex-shrink: 0; transition: all .3s; }
+.dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.warn { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+
+/* ── BOTTOM NAV ── */
+.bot-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(var(--nav-h) + var(--safe-b));
+  background: var(--bg1); border-top: 1px solid var(--line);
+  display: flex; z-index: 100;
+  padding-bottom: var(--safe-b);
+}
+.nav-btn {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  background: none; color: var(--txt3); font-family: var(--mono);
+  font-size: 9px; letter-spacing: .8px; text-transform: uppercase;
+  transition: color .15s; padding: 8px;
+}
+.nav-btn svg { width: 20px; height: 20px; transition: all .15s; }
+.nav-btn.active { color: var(--cyan); }
+.nav-btn.active svg { filter: drop-shadow(0 0 4px var(--cyan)); }
+
+/* ═══════════════════════════════════════════════
+   SCREEN 1 — CAMERA
+════════════════════════════════════════════════ */
+#screen-cam {
+  background: #000;
+}
+.cam-wrap {
+  flex: 1; position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: var(--nav-h);
+}
+#vid, #cvs {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover;
+}
+#vid { transform: scaleX(-1); }
+#cvs { transform: scaleX(-1); background: transparent; }
+
+/* ANGLE PANEL — overlay at bottom of camera */
+.angle-panel {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(7,8,15,.95) 70%, transparent);
+  padding: 28px 12px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.ap-row { display: flex; gap: 6px; }
+.ap-card {
+  flex: 1; background: rgba(12,15,26,.8); border: 1px solid var(--line2);
+  border-radius: 8px; padding: 7px 8px;
+}
+.ap-label { font-family: var(--mono); font-size: 7px; letter-spacing: 1px; text-transform: uppercase; color: var(--txt3); margin-bottom: 3px; }
+.ap-joint { font-size: 8px; font-weight: 600; color: var(--txt2); margin-bottom: 4px; text-transform: uppercase; font-family: var(--mono); }
+.ap-val { font-family: var(--mono); font-size: 20px; font-weight: 500; line-height: 1; color: #fff; }
+.ap-val span { font-size: 9px; color: var(--txt3); }
+.ap-ex { font-family: var(--mono); font-size: 8px; color: var(--txt2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-max { font-family: var(--mono); font-size: 8px; color: var(--txt3); margin-top: 2px; }
+
+/* FAB BUTTONS */
+.fab-row {
+  position: absolute; top: 12px; right: 12px;
+  display: flex; flex-direction: column; gap: 8px; z-index: 20;
+}
+.fab {
+  width: 46px; height: 46px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; border: 1px solid; transition: all .15s; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+.fab-save { background: rgba(0,229,204,.15); border-color: rgba(0,229,204,.4); color: var(--cyan); }
+.fab-save:active { background: rgba(0,229,204,.3); transform: scale(.95); }
+.fab-reset { background: rgba(255,68,102,.12); border-color: rgba(255,68,102,.3); color: var(--red); }
+.fab-reset:active { background: rgba(255,68,102,.25); transform: scale(.95); }
+
+/* FLASH on save */
+.flash { position: absolute; inset: 0; background: rgba(0,229,204,.15); pointer-events: none; opacity: 0; transition: opacity .3s; z-index: 50; }
+.flash.show { opacity: 1; }
+
+/* LOADING overlay */
+#loading {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; z-index: 200;
+}
+.ld-logo { width: 60px; height: 60px; background: linear-gradient(135deg,var(--cyan),var(--blue)); border-radius: 18px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 24px rgba(0,229,204,.4); }
+.ld-logo svg { width: 28px; height: 28px; }
+.ld-title { font-size: 20px; font-weight: 700; color: #fff; }
+.ld-sub { font-family: var(--mono); font-size: 10px; color: var(--txt3); letter-spacing: 1px; text-align: center; padding: 0 32px; }
+.ld-bar { width: 160px; height: 3px; background: var(--line2); border-radius: 99px; overflow: hidden; }
+.ld-fill { height: 100%; width: 30%; background: linear-gradient(90deg, var(--cyan), var(--blue)); border-radius: 99px; animation: ldbar 1.5s ease-in-out infinite; }
+@keyframes ldbar { 0%{transform:translateX(-100%)} 100%{transform:translateX(500%)} }
+
+/* ═══════════════════════════════════════════════
+   SCREEN 2 — SESSIONS LIST
+════════════════════════════════════════════════ */
+#screen-sessions { background: var(--bg); }
+.ses-scroll { flex: 1; overflow-y: auto; padding: 8px 10px 10px; margin-bottom: var(--nav-h); }
+.sw { position: relative; margin: 10px 10px 4px; }
+.sw input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--line2);
+  border-radius: 8px; color: var(--txt); font-family: var(--mono); font-size: 11px;
+  padding: 9px 12px 9px 32px;
+}
+.sw input:focus { border-color: var(--cyan); }
+.sw-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--txt3); pointer-events: none; }
+.ses-count { font-family: var(--mono); font-size: 9px; color: var(--txt3); padding: 4px 14px 6px; letter-spacing: 1px; text-transform: uppercase; }
+.si-item {
+  padding: 11px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid transparent; margin-bottom: 4px; background: var(--bg1);
+  transition: background .1s;
+}
+.si-item:active { background: var(--bg2); }
+.si-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.si-id { font-family: var(--mono); font-size: 9px; color: var(--txt3); }
+.si-name { font-size: 13px; font-weight: 600; color: #fff; }
+.si-name.empty { color: var(--txt2); font-weight: 400; font-style: italic; font-size: 12px; }
+.si-date { font-family: var(--mono); font-size: 9px; color: var(--txt3); margin-top: 2px; }
+.si-arrow { margin-left: auto; color: var(--txt3); font-size: 16px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 48px 24px; gap: 10px; color: var(--txt3); }
+.empty-icon { font-size: 40px; opacity: .25; }
+.empty-txt { font-family: var(--mono); font-size: 11px; text-align: center; }
+
+/* Import button */
+.import-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 8px 10px; padding: 10px; border-radius: 8px;
+  background: var(--bg2); border: 1px dashed var(--line2);
+  color: var(--txt2); font-size: 11px; font-family: var(--mono); cursor: pointer;
+  transition: all .15s;
+}
+.import-btn:active { background: var(--bg3); border-color: var(--cyan); color: var(--cyan); }
+
+/* ═══════════════════════════════════════════════
+   SCREEN 3 — SESSION DETAIL
+════════════════════════════════════════════════ */
+#screen-detail { background: var(--bg); }
+.detail-scroll { flex: 1; overflow-y: auto; padding: 10px 10px 80px; }
+.back-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; height: var(--hd-h);
+  background: var(--bg1); border-bottom: 1px solid var(--line);
+  flex-shrink: 0; z-index: 10;
+}
+.back-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: none; color: var(--txt2); font-size: 12px; font-family: var(--mono);
+  padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line2);
+}
+.back-btn:active { background: var(--bg3); }
+.back-title { font-size: 13px; font-weight: 600; color: #fff; }
+
+/* session header card */
+.ses-hd-card {
+  background: var(--bg1); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px; display: flex; gap: 12px;
+  align-items: flex-start; margin-bottom: 10px;
+}
+.ses-num {
+  width: 44px; height: 44px; flex-shrink: 0;
+  background: var(--cyan-d); border: 1px solid rgba(0,229,204,.2);
+  border-radius: 9px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.sn-lbl { font-family: var(--mono); font-size: 7px; color: var(--cyan); letter-spacing: 1px; text-transform: uppercase; }
+.sn-val { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--cyan); line-height: 1; }
+.ses-info { flex: 1; min-width: 0; }
+.ses-big { font-size: 15px; font-weight: 700; color: #fff; }
+.ses-big.empty { color: var(--txt2); font-weight: 400; font-style: italic; font-size: 12px; }
+.ses-dates { font-family: var(--mono); font-size: 9px; color: var(--txt3); margin-top: 3px; }
+.ses-notes { font-size: 11px; color: var(--txt2); margin-top: 4px; }
+
+/* assign form */
+.assign-form {
+  background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px;
+  padding: 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
+}
+.assign-title { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--txt2); }
+.field label { display: block; font-family: var(--mono); font-size: 8px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--txt3); margin-bottom: 5px; }
+.field input, .field textarea {
+  width: 100%; background: var(--bg3); border: 1px solid var(--line2);
+  border-radius: 6px; color: var(--txt); font-family: var(--head); font-size: 12px;
+  padding: 9px 11px;
+}
+.field textarea { resize: none; height: 64px; }
+.field input:focus, .field textarea:focus { border-color: var(--cyan); }
+.btn-row { display: flex; gap: 8px; }
+.btn {
+  padding: 9px 16px; border-radius: 7px; font-size: 12px; font-weight: 600;
+  transition: all .15s; border: 1px solid transparent; cursor: pointer;
+}
+.btn-p { background: var(--cyan); color: #000; border-color: var(--cyan); }
+.btn-p:active { background: var(--cyan2); }
+.btn-g { background: transparent; color: var(--txt2); border-color: var(--line2); }
+.btn-g:active { background: var(--bg3); }
+.btn-d { background: transparent; color: var(--red); border-color: rgba(255,68,102,.3); }
+.btn-d:active { background: var(--red-d); }
+
+/* tabs */
+.tabs-row { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab {
+  padding: 6px 12px; border-radius: 6px; font-family: var(--mono); font-size: 9px;
+  cursor: pointer; border: 1px solid var(--line2); color: var(--txt3); background: var(--bg2);
+  letter-spacing: .5px; transition: all .15s;
+}
+.tab.active { background: var(--cyan-d); color: var(--cyan); border-color: rgba(0,229,204,.3); }
+.tab-content { display: none; }
+.tab-content.show { display: block; }
+
+/* joint cards */
+.joints-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.jcard {
+  background: var(--bg1); border: 1px solid var(--line);
+  border-radius: 8px; padding: 11px;
+}
+.jcard-title {
+  font-size: 8px; font-family: var(--mono); letter-spacing: 1px;
+  text-transform: uppercase; color: var(--txt3); display: flex; align-items: center;
+  gap: 5px; margin-bottom: 7px;
+}
+.dot2 { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.jcard-body { display: flex; gap: 8px; margin-bottom: 6px; }
+.jval { flex: 1; }
+.jval-lbl { font-family: var(--mono); font-size: 7px; color: var(--txt3); margin-bottom: 1px; text-transform: uppercase; letter-spacing: 1px; }
+.jval-num { font-family: var(--mono); font-size: 20px; font-weight: 500; color: #fff; line-height: 1; }
+.jval-unit { font-family: var(--mono); font-size: 8px; color: var(--txt3); }
+.mv-row { display: flex; align-items: center; justify-content: space-between; margin-top: 3px; }
+.mv-name { font-size: 8px; color: var(--txt2); font-family: var(--mono); }
+.mv-ang { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.divider { height: 1px; background: var(--line); margin: 5px 0; }
+
+/* registro table */
+.reg-table { width: 100%; border-collapse: collapse; }
+.reg-table th { padding: 7px 8px; text-align: left; font-family: var(--mono); font-size: 7px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--txt3); background: var(--bg2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.reg-table td { padding: 6px 8px; font-size: 10px; color: var(--txt); border-bottom: 1px solid rgba(28,38,64,.4); }
+.reg-table tr:last-child td { border-bottom: none; }
+.badge { font-family: var(--mono); font-size: 8px; padding: 2px 6px; border-radius: 99px; background: var(--cyan-d); color: var(--cyan); border: 1px solid rgba(0,229,204,.2); }
+.region-tag { display: inline-flex; padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: 8px; font-weight: 600; }
+.rt-sup { background: var(--blue-d); color: var(--blue); border: 1px solid rgba(77,184,255,.2); }
+.rt-inf { background: var(--orange-d); color: var(--orange); border: 1px solid rgba(255,140,66,.2); }
+.tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--line); }
+
+/* detail bottom actions */
+.det-actions {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg1); border-top: 1px solid var(--line);
+  padding: 10px 12px; display: flex; gap: 8px;
+  padding-bottom: calc(10px + var(--safe-b));
+  z-index: 50;
+}
+.det-actions .btn { flex: 1; text-align: center; font-size: 11px; }
+
+/* toast */
+#toast {
+  position: fixed; bottom: calc(var(--nav-h) + 12px); left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--bg1); border: 1px solid var(--line2); border-radius: 99px;
+  padding: 8px 18px; font-family: var(--mono); font-size: 10px; color: var(--txt);
+  z-index: 300; opacity: 0; transition: all .25s; white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.green { border-color: rgba(0,229,204,.3); color: var(--cyan); }
+
+/* HTTPS warning */
+#https-warn {
+  position: fixed; inset: 0; background: var(--bg); z-index: 500;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 32px; display: none;
+}
+#https-warn h2 { color: var(--orange); font-size: 18px; }
+#https-warn p { font-family: var(--mono); font-size: 11px; color: var(--txt2); text-align: center; line-height: 1.6; }
+
+::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="ld-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="13"/>
+      <line x1="8" y1="9" x2="12" y2="11"/><line x1="16" y1="9" x2="12" y2="11"/>
+      <line x1="10" y1="13" x2="8" y2="20"/><line x1="14" y1="13" x2="16" y2="20"/>
+    </svg>
+  </div>
+  <div class="ld-title">ROMAnalyzer</div>
+  <div class="ld-sub" id="ld-msg">Cargando modelos de IA...<br>Puede tardar unos segundos</div>
+  <div class="ld-bar"><div class="ld-fill"></div></div>
+</div>
+
+<!-- HTTPS WARNING -->
+<div id="https-warn">
+  <h2>⚠️ Se requiere HTTPS</h2>
+  <p>Para acceder a la cámara desde un celular o tablet,<br>el archivo debe abrirse desde un servidor HTTPS<br>o en localhost.<br><br>En Chrome: <strong>chrome://flags/#unsafely-treat-insecure-origin-as-secure</strong></p>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════════
+     SCREEN 1: CÁMARA
+════════════════════════════════════ -->
+<div id="screen-cam" class="screen">
+  <div class="hd">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="13"/>
+        <line x1="8" y1="9" x2="12" y2="11"/><line x1="16" y1="9" x2="12" y2="11"/>
+        <line x1="10" y1="13" x2="8" y2="20"/><line x1="14" y1="13" x2="16" y2="20"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-name">ROMAnalyzer</div>
+      <div class="logo-tag">Goniometría FullBody</div>
+    </div>
+    <div class="hd-right">
+      <div class="chip"><div class="dot" id="statusDot"></div><span id="statusTxt">Iniciando</span></div>
+    </div>
+  </div>
+
+  <div class="cam-wrap">
+    <video id="vid" autoplay playsinline muted></video>
+    <canvas id="cvs"></canvas>
+    <div class="flash" id="flash"></div>
+
+    <!-- FABs -->
+    <div class="fab-row">
+      <button class="fab fab-save" onclick="saveSession()" title="Guardar sesión (S)">💾</button>
+      <button class="fab fab-reset" onclick="resetSession()" title="Reset (R)">🔄</button>
+    </div>
+
+    <!-- Angle panel -->
+    <div class="angle-panel">
+      <div class="ap-row" id="ap-superior">
+        <!-- Filled by JS -->
+      </div>
+      <div class="ap-row" id="ap-inferior">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN 2: SESIONES
+════════════════════════════════════ -->
+<div id="screen-sessions" class="screen hidden">
+  <div class="hd">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="13"/>
+        <line x1="8" y1="9" x2="12" y2="11"/><line x1="16" y1="9" x2="12" y2="11"/>
+        <line x1="10" y1="13" x2="8" y2="20"/><line x1="14" y1="13" x2="16" y2="20"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-name">Sesiones</div>
+      <div class="logo-tag">Historial guardado</div>
+    </div>
+  </div>
+
+  <div class="ses-scroll">
+    <div class="sw">
+      <span class="sw-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </span>
+      <input type="text" id="search-input" placeholder="Buscar paciente..." oninput="filterSessions(this.value)">
+    </div>
+    <div class="ses-count" id="ses-count">0 sesiones</div>
+    <label class="import-btn">
+      📂 Importar JSON desde PC
+      <input type="file" accept=".json" style="display:none" onchange="importJSON(this)">
+    </label>
+    <div id="ses-list"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCREEN 3: DETALLE SESIÓN
+════════════════════════════════════ -->
+<div id="screen-detail" class="screen hidden">
+  <div class="back-hd">
+    <button class="back-btn" onclick="goBack()">← Atrás</button>
+    <div class="back-title" id="detail-title">Sesión</div>
+  </div>
+  <div class="detail-scroll" id="detail-content"></div>
+  <div class="det-actions" id="detail-actions"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="bot-nav" id="bot-nav">
+  <button class="nav-btn active" id="nav-cam" onclick="showScreen('cam')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+    Cámara
+  </button>
+  <button class="nav-btn" id="nav-ses" onclick="showScreen('sessions')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+    </svg>
+    Sesiones
+  </button>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════════════
+// MATH UTILS (ported from Python)
+// ═══════════════════════════════════════════════════
+const toDeg = r => r * 180 / Math.PI;
+
+function vecNorm(v) { return Math.sqrt(v.reduce((s, x) => s + x * x, 0)); }
+function vecDot(v1, v2) { return v1.reduce((s, x, i) => s + x * v2[i], 0); }
+
+function vectorAngle(v1, v2) {
+  const n1 = vecNorm(v1), n2 = vecNorm(v2);
+  if (n1 < 1e-6 || n2 < 1e-6) return 0;
+  return toDeg(Math.acos(Math.max(-1, Math.min(1, vecDot(v1, v2) / (n1 * n2)))));
+}
+
+function angle3d(p1, p2, p3, useZ = true) {
+  const ba = useZ ? [p1.x-p2.x, p1.y-p2.y, p1.z-p2.z] : [p1.x-p2.x, p1.y-p2.y];
+  const bc = useZ ? [p3.x-p2.x, p3.y-p2.y, p3.z-p2.z] : [p3.x-p2.x, p3.y-p2.y];
+  const na = vecNorm(ba), nc = vecNorm(bc);
+  if (na < 1e-6 || nc < 1e-6) return 0;
+  for (let i = 0; i < ba.length; i++) { ba[i] /= na; bc[i] /= nc; }
+  return toDeg(Math.acos(Math.max(-1, Math.min(1, vecDot(ba, bc)))));
+}
+
+function angle2d(p1, p2, p3) {
+  return vectorAngle([p1.x-p2.x, p1.y-p2.y], [p3.x-p2.x, p3.y-p2.y]);
+}
+
+function smoothAngle(buf, val, maxLen = 5, clip = 15) {
+  if (buf.length > 0) {
+    const last = buf[buf.length - 1];
+    val = Math.max(last - clip, Math.min(last + clip, val));
+  }
+  buf.push(val);
+  if (buf.length > maxLen) buf.shift();
+  return buf.reduce((s, v) => s + v, 0) / buf.length;
+}
+
+// ═══════════════════════════════════════════════════
+// ANALYSIS (ported from Python)
+// ═══════════════════════════════════════════════════
+const DETECT_THRESHOLD = 12;
+const MIN_VISIBILITY   = 0.50;
+
+const EXERCISES_META = {
+  flexion_hombro:          { nombre: 'Flexión',        region: 'superior' },
+  extension_hombro:        { nombre: 'Extensión',      region: 'superior' },
+  abduccion_hombro:        { nombre: 'Abducción',      region: 'superior' },
+  flexion_codo:            { nombre: 'Flexión',        region: 'superior' },
+  extension_codo:          { nombre: 'Extensión',      region: 'superior' },
+  flexion_cadera:          { nombre: 'Flexión',        region: 'inferior' },
+  extension_cadera:        { nombre: 'Extensión',      region: 'inferior' },
+  abduccion_cadera:        { nombre: 'Abducción',      region: 'inferior' },
+  flexion_rodilla:         { nombre: 'Flexión',        region: 'inferior' },
+  extension_rodilla:       { nombre: 'Extensión',      region: 'inferior' },
+  dorsiflexion_tobillo:    { nombre: 'Dorsiflexión',   region: 'inferior' },
+  flexion_plantar_tobillo: { nombre: 'Flex. Plantar',  region: 'inferior' },
+};
+
+function detectPlane(shoulder, elbow) {
+  const ax = Math.abs(elbow.x - shoulder.x);
+  const ay = Math.abs(elbow.y - shoulder.y);
+  if (ay > 0.55) return 'sagital';
+  if (ax > 0.55) return 'frontal';
+  return 'mixto';
+}
+
+function analyzeShoulder(shoulder, elbow, hip) {
+  const ang = angle3d(hip, shoulder, elbow, true);
+  const ref = { x: shoulder.x, y: shoulder.y + 0.3, z: shoulder.z };
+  const abd = angle3d(ref, shoulder, elbow, false);
+  const behind = (elbow.z - shoulder.z) > 0.06;
+  const plane = detectPlane(shoulder, elbow);
+  let movement = null, angle = 0;
+  if (plane === 'sagital' || plane === 'mixto') {
+    if (ang > DETECT_THRESHOLD && elbow.y < shoulder.y - 0.01) {
+      movement = 'flexion_hombro'; angle = ang;
+    } else if (behind && (elbow.y - shoulder.y) > 0.02) {
+      const ext = Math.max(0, Math.min(60, ang * 0.6));
+      if (ext > DETECT_THRESHOLD) { movement = 'extension_hombro'; angle = ext; }
+    }
+  }
+  if (!movement && (plane === 'frontal' || plane === 'mixto')) {
+    const hd = Math.abs(elbow.x - shoulder.x);
+    const vd = Math.abs(elbow.y - shoulder.y);
+    if (hd > vd * 0.45 && abd > DETECT_THRESHOLD) {
+      movement = 'abduccion_hombro'; angle = abd;
+    }
+  }
+  return [movement, angle];
+}
+
+function analyzeElbow(shoulder, elbow, wrist) {
+  const raw  = angle3d(shoulder, elbow, wrist, true);
+  const flex = Math.max(0, Math.min(150, 180 - raw));
+  if (flex > DETECT_THRESHOLD) return ['flexion_codo', flex];
+  if (flex < 8) return ['extension_codo', 0];
+  return [null, 0];
+}
+
+function calcHipFlexion(shoulder, hip, knee) {
+  const ref = { x: hip.x, y: hip.y - 0.2 };
+  const a = angle2d(ref, hip, knee);
+  if (knee.y < hip.y - 0.05) return Math.min(a, 125);
+  return 0;
+}
+
+function calcHipExtension(shoulder, hip, knee) {
+  const trunk = [shoulder.x-hip.x, shoulder.y-hip.y];
+  const leg   = [knee.x-hip.x, knee.y-hip.y];
+  const a = vectorAngle(trunk, leg);
+  if (knee.y > hip.y && Math.abs(knee.x-hip.x) > Math.abs(knee.y-hip.y) * 0.2) {
+    return Math.min(180 - a, 60);
+  }
+  return 0;
+}
+
+function calcHipAbduction(shoulder, hip, knee, side) {
+  const trunk = [shoulder.x-hip.x, shoulder.y-hip.y];
+  const leg   = [knee.x-hip.x, knee.y-hip.y];
+  const a = vectorAngle(trunk, leg);
+  if (Math.abs(knee.x-hip.x) > Math.abs(knee.y-hip.y) * 0.5) {
+    if (side === 'derecho'   && knee.x < hip.x) return a;
+    if (side === 'izquierdo' && knee.x > hip.x) return a;
+  }
+  return 0;
+}
+
+function analyzeHip(shoulder, hip, knee, side) {
+  const flex = calcHipFlexion(shoulder, hip, knee);
+  const ext  = calcHipExtension(shoulder, hip, knee);
+  const abd  = calcHipAbduction(shoulder, hip, knee, side);
+  if (flex > DETECT_THRESHOLD && flex > abd && flex > ext) return ['flexion_cadera', flex];
+  if (ext > DETECT_THRESHOLD && ext > abd)                 return ['extension_cadera', ext];
+  if (abd > DETECT_THRESHOLD)                              return ['abduccion_cadera', abd];
+  return [null, 0];
+}
+
+function analyzeKnee(hip, knee, ankle) {
+  const ul  = [hip.x-knee.x,   hip.y-knee.y];
+  const ll  = [ankle.x-knee.x, ankle.y-knee.y];
+  const ang = vectorAngle(ul, ll);
+  const flex = Math.max(0, Math.min(150, 180 - ang));
+  if (flex > 10) return ['flexion_rodilla', flex];
+  if (ang > 160) return ['extension_rodilla', 0];
+  if (ang < 160) return ['extension_rodilla', 180 - ang];
+  return [null, 0];
+}
+
+function analyzeAnkle(knee, ankle, footIdx) {
+  const leg  = [knee.x-ankle.x, knee.y-ankle.y];
+  const foot = [footIdx.x-ankle.x, footIdx.y-ankle.y];
+  const ang  = vectorAngle(leg, foot);
+  if (footIdx.y < ankle.y) {
+    const dorsi = Math.min(ang, 30);
+    if (dorsi >= 25) return ['dorsiflexion_tobillo', dorsi];
+    return [null, 0];
+  } else {
+    const fp = Math.min(180 - ang, 60);
+    if (fp >= 25) return ['flexion_plantar_tobillo', fp];
+  }
+  return [null, 0];
+}
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const SIDES  = ['derecho', 'izquierdo'];
+const JOINTS = ['hombro', 'codo', 'cadera', 'rodilla', 'tobillo'];
+
+function makeJointState() {
+  const s = {};
+  for (const side of SIDES) {
+    s[side] = {};
+    for (const j of JOINTS) {
+      s[side][j] = { buffer: [], angle: 0, max: 0, min: 180, exercise: 'reposo' };
+    }
+  }
+  return s;
+}
+
+let jointData = makeJointState();
+let sessionRegistro    = [];
+let sessionMovimientos = {};
+for (const side of SIDES) for (const j of JOINTS) sessionMovimientos[`${j}_${side}`] = {};
+let tickCount = 0;
+let sessionStartTime = null;
+let detecting = false;
+
+function updateJoint(side, joint, exercise, angle) {
+  const d = jointData[side][joint];
+  d.exercise = exercise;
+  d.angle = smoothAngle(d.buffer, angle);
+  if (exercise !== 'reposo' && d.angle > 0) {
+    d.max = Math.max(d.max, d.angle);
+    d.min = Math.min(d.min, d.angle);
+  }
+  return d.angle;
+}
+
+function tick() {
+  tickCount++;
+  if (tickCount % 30 !== 0) return;
+  if (!sessionStartTime) sessionStartTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const ts = new Date().toTimeString().substring(0, 8);
+  for (const side of SIDES) {
+    for (const j of JOINTS) {
+      const d = jointData[side][j];
+      if (d.exercise !== 'reposo' && d.angle > 0) {
+        const meta = EXERCISES_META[d.exercise];
+        sessionRegistro.push({ timestamp: ts, lado: side, region: meta.region, articulacion: j, ejercicio: d.exercise, angulo: Math.round(d.angle * 100) / 100 });
+        const key = `${j}_${side}`;
+        const prev = sessionMovimientos[key][d.exercise] || 0;
+        sessionMovimientos[key][d.exercise] = Math.max(prev, d.max);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// SESSION STORAGE (localStorage — compatible format)
+// ═══════════════════════════════════════════════════
+function getNextId() {
+  const sessions = loadAllSessions();
+  const ids = sessions.map(s => parseInt(s.id) || 0);
+  return String(Math.max(0, ...ids) + 1);
+}
+
+function loadAllSessions() {
+  try {
+    const raw = localStorage.getItem('rom_sessions');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveAllSessions(arr) {
+  localStorage.setItem('rom_sessions', JSON.stringify(arr));
+}
+
+function saveSession() {
+  const sid = getNextId();
+  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const maxMin = {};
+  for (const side of SIDES) for (const j of JOINTS) {
+    const d = jointData[side][j];
+    maxMin[`${j}_${side}`] = { max: Math.round(d.max * 100) / 100, min: d.min < 180 ? Math.round(d.min * 100) / 100 : 0 };
+  }
+  const session = {
+    id: sid,
+    inicio: sessionStartTime || now,
+    fin: now,
+    paciente: '', notas: '',
+    tipo: 'gonio_fullbody',
+    max_min: maxMin,
+    movimientos_detectados: JSON.parse(JSON.stringify(sessionMovimientos)),
+    registro: [...sessionRegistro]
+  };
+  const arr = loadAllSessions();
+  arr.unshift(session);
+  saveAllSessions(arr);
+
+  // Reset session buffers
+  sessionRegistro = [];
+  for (const k in sessionMovimientos) sessionMovimientos[k] = {};
+  sessionStartTime = null;
+
+  // Flash effect
+  const fl = document.getElementById('flash');
+  fl.classList.add('show');
+  setTimeout(() => fl.classList.remove('show'), 300);
+
+  showToast(`✓ Sesión #${sid} guardada`, true);
+  renderSessionsList();
+}
+
+function resetSession() {
+  jointData = makeJointState();
+  sessionRegistro = [];
+  for (const k in sessionMovimientos) sessionMovimientos[k] = {};
+  sessionStartTime = null;
+  tickCount = 0;
+  showToast('🔄 Reset completo');
+}
+
+function deleteSession(id) {
+  const arr = loadAllSessions().filter(s => s.id !== id);
+  saveAllSessions(arr);
+  renderSessionsList();
+  showToast('Sesión eliminada');
+}
+
+function updateSession(id, paciente, notas) {
+  const arr = loadAllSessions();
+  const s = arr.find(x => x.id === id);
+  if (s) { s.paciente = paciente; s.notas = notas; }
+  saveAllSessions(arr);
+}
+
+function downloadSession(session) {
+  const blob = new Blob([JSON.stringify(session, null, 4)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const name = session.paciente ? `sesion_${session.id}_${session.paciente.replace(/\s+/g,'_')}.json` : `sesion_${session.id}.json`;
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.id) throw new Error('No es una sesión válida');
+      const arr = loadAllSessions();
+      if (arr.find(s => s.id === data.id)) {
+        showToast('⚠️ Sesión ya existe (mismo ID)');
+      } else {
+        arr.unshift(data);
+        saveAllSessions(arr);
+        renderSessionsList();
+        showToast('✓ Sesión importada', true);
+      }
+    } catch { showToast('⚠️ Archivo inválido'); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ═══════════════════════════════════════════════════
+// MEDIAPIPE SETUP
+// ═══════════════════════════════════════════════════
+const vid = document.getElementById('vid');
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+let poseReady = false;
+
+const COLORS = {
+  hombro:  '#4db8ff',
+  codo:    '#00e5cc',
+  cadera:  '#ff8c42',
+  rodilla: '#39d353',
+  tobillo: '#b985ff',
+};
+
+function onResults(results) {
+  cvs.width  = cvs.offsetWidth;
+  cvs.height = cvs.offsetHeight;
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+  const lm = results.poseLandmarks;
+  if (lm) {
+    detecting = true;
+    setStatus('on', 'Detectando');
+
+    // Draw skeleton
+    if (window.drawConnectors && window.POSE_CONNECTIONS) {
+      drawConnectors(ctx, lm, POSE_CONNECTIONS, { color: 'rgba(0,229,204,0.6)', lineWidth: 2 });
+      drawLandmarks(ctx, lm, { color: '#00e5cc', lineWidth: 1, radius: 3 });
+    }
+
+    // Landmark indices
+    const IDX = {
+      l_sh:11, r_sh:12, l_el:13, r_el:14, l_wr:15, r_wr:16,
+      l_hip:23, r_hip:24, l_kn:25, r_kn:26, l_an:27, r_an:28,
+      l_fi:31, r_fi:32
+    };
+
+    // "derecho" = patient's right = camera LEFT (mirrored view)
+    const sides_lm = {
+      derecho:   { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
+      izquierdo: { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
+    };
+
+    for (const side of SIDES) {
+      const { sh, el, wr, hip, kn, an, fi } = sides_lm[side];
+      const visSup = Math.min(sh.visibility, el.visibility, wr.visibility);
+      const visInf = Math.min(hip.visibility, kn.visibility, an.visibility);
+
+      if (visSup >= MIN_VISIBILITY) {
+        const [exS, angS] = analyzeShoulder(sh, el, hip);
+        updateJoint(side, 'hombro', exS || 'reposo', angS);
+        const [exE, angE] = analyzeElbow(sh, el, wr);
+        updateJoint(side, 'codo', exE || 'reposo', angE);
+      } else {
+        updateJoint(side, 'hombro', 'reposo', 0);
+        updateJoint(side, 'codo',   'reposo', 0);
+      }
+
+      if (visInf >= MIN_VISIBILITY) {
+        const [exH, angH] = analyzeHip(sh, hip, kn, side);
+        updateJoint(side, 'cadera', exH || 'reposo', angH);
+        const [exK, angK] = analyzeKnee(hip, kn, an);
+        updateJoint(side, 'rodilla', exK || 'reposo', angK);
+        const [exA, angA] = analyzeAnkle(kn, an, fi);
+        updateJoint(side, 'tobillo', exA || 'reposo', angA);
+      } else {
+        updateJoint(side, 'cadera',  'reposo', 0);
+        updateJoint(side, 'rodilla', 'reposo', 0);
+        updateJoint(side, 'tobillo', 'reposo', 0);
+      }
+    }
+
+    tick();
+    updateAnglePanel();
+
+  } else {
+    detecting = false;
+    setStatus('warn', 'Sin persona');
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,68,102,0.7)';
+    ctx.font = 'bold 14px JetBrains Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚠ NO SE DETECTA PERSONA', cvs.width / 2, 32);
+    ctx.restore();
+  }
+}
+
+async function initMediaPipe() {
+  setLdMsg('Cargando modelo de pose...');
+  try {
+    const pose = new Pose({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    pose.onResults(onResults);
+
+    setLdMsg('Activando cámara...');
+    const camera = new Camera(vid, {
+      onFrame: async () => { await pose.send({ image: vid }); },
+      width: 640, height: 480
+    });
+    await camera.start();
+    poseReady = true;
+    document.getElementById('loading').style.opacity = '0';
+    setTimeout(() => document.getElementById('loading').style.display = 'none', 400);
+    setStatus('on', 'Detectando');
+  } catch (err) {
+    setLdMsg('Error: ' + err.message);
+    console.error(err);
+  }
+}
+
+function setLdMsg(msg) { document.getElementById('ld-msg').textContent = msg; }
+function setStatus(state, txt) {
+  const dot = document.getElementById('statusDot');
+  const sp  = document.getElementById('statusTxt');
+  dot.className = 'dot' + (state === 'on' ? ' on' : state === 'warn' ? ' warn' : '');
+  sp.textContent = txt;
+}
+
+// ═══════════════════════════════════════════════════
+// ANGLE PANEL UI
+// ═══════════════════════════════════════════════════
+function updateAnglePanel() {
+  const joints_sup = ['hombro', 'codo'];
+  const joints_inf = ['cadera', 'rodilla', 'tobillo'];
+  renderAP('ap-superior', joints_sup);
+  renderAP('ap-inferior', joints_inf);
+}
+
+function renderAP(containerId, joints) {
+  const container = document.getElementById(containerId);
+  let html = '';
+  for (const j of joints) {
+    for (const side of SIDES) {
+      const d = jointData[side][j];
+      const col = COLORS[j];
+      const active = d.exercise !== 'reposo';
+      const ex = active ? (EXERCISES_META[d.exercise]?.nombre || d.exercise) : '—';
+      const ang = active ? Math.round(d.angle) : 0;
+      const sideLabel = side === 'derecho' ? 'D' : 'I';
+      html += `<div class="ap-card">
+        <div class="ap-label">${j.toUpperCase()} · ${sideLabel}</div>
+        <div class="ap-val" style="color:${active ? col : 'var(--txt3)'}">${ang}<span>°</span></div>
+        <div class="ap-ex" style="color:${active ? col : 'var(--txt3)'}">${ex}</div>
+        <div class="ap-max">MAX ${Math.round(d.max)}°</div>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+// SESSIONS LIST UI
+// ═══════════════════════════════════════════════════
+let searchQuery = '';
+function filterSessions(q) { searchQuery = q; renderSessionsList(); }
+
+function renderSessionsList() {
+  const all = loadAllSessions();
+  const q   = searchQuery.toLowerCase();
+  const filtered = q ? all.filter(s => (s.paciente||'').toLowerCase().includes(q) || s.id.includes(q)) : all;
+
+  document.getElementById('ses-count').textContent = `${filtered.length} sesión${filtered.length !== 1 ? 'es' : ''}`;
+
+  const list = document.getElementById('ses-list');
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-txt">${q ? 'Sin resultados para "'+q+'"' : 'No hay sesiones guardadas.\nGuarda tu primera sesión en la cámara.'}</div>
+    </div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(s => `
+    <div class="si-item" onclick="openDetail('${s.id}')">
+      <div class="si-top">
+        <span class="si-id">Sesión #${s.id}</span>
+        <span class="si-arrow">›</span>
+      </div>
+      <div class="si-name ${!s.paciente ? 'empty' : ''}">${s.paciente || 'Sin paciente asignado'}</div>
+      <div class="si-date">${(s.inicio||'—').substring(0,16)}</div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// SESSION DETAIL UI
+// ═══════════════════════════════════════════════════
+let currentDetailId = null;
+let assignFormOpen  = false;
+
+function openDetail(id) {
+  currentDetailId = id;
+  assignFormOpen  = false;
+  const session = loadAllSessions().find(s => s.id === id);
+  if (!session) return;
+  document.getElementById('detail-title').textContent = `Sesión #${id}`;
+  renderDetail(session);
+  showScreen('detail');
+}
+
+function renderDetail(s) {
+  const colors = { hombro:'var(--blue)', codo:'var(--cyan)', cadera:'var(--orange)', rodilla:'var(--green)', tobillo:'var(--purple)' };
+  const allJoints = ['hombro','codo','cadera','rodilla','tobillo'];
+
+  function card(joint, side) {
+    const key  = `${joint}_${side}`;
+    const data = s.max_min?.[key] || { max: 0, min: 0 };
+    const col  = colors[joint];
+    const movs = Object.entries(s.movimientos_detectados?.[key] || {});
+    const sideLabel = side === 'derecho' ? 'DER.' : 'IZQ.';
+    return `<div class="jcard">
+      <div class="jcard-title"><span class="dot2" style="background:${col}"></span>${joint.toUpperCase()} · ${sideLabel}</div>
+      <div class="jcard-body">
+        <div class="jval"><div class="jval-lbl">Máx.</div><div class="jval-num" style="color:${col}">${data.max?.toFixed(0)||0}</div><div class="jval-unit">grados</div></div>
+        <div class="jval"><div class="jval-lbl">Mín. activo</div><div class="jval-num">${data.min > 0 ? data.min.toFixed(0) : '—'}</div><div class="jval-unit">grados</div></div>
+      </div>
+      ${movs.length ? `<div class="divider"></div>${movs.map(([ex, ang]) => `<div class="mv-row"><div class="mv-name">${ex.replace(/_/g,' ')}</div><div class="mv-ang" style="color:${col}">${parseFloat(ang).toFixed(0)}°</div></div>`).join('')}` : ''}
+    </div>`;
+  }
+
+  const registros = s.registro || [];
+  const assignSection = assignFormOpen ? `
+    <div class="assign-form">
+      <div class="assign-title">Asignar paciente — Sesión #${s.id}</div>
+      <div class="field"><label>Nombre del paciente</label><input type="text" id="fn" placeholder="Ej: Carlos Mendoza" value="${s.paciente||''}"></div>
+      <div class="field"><label>Notas clínicas</label><textarea id="fno" placeholder="Diagnóstico, observaciones...">${s.notas||''}</textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-p" onclick="guardarAsignacion('${s.id}')">Guardar</button>
+        <button class="btn btn-g" onclick="toggleAssignForm()">Cancelar</button>
+      </div>
+    </div>` : '';
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="ses-hd-card">
+      <div class="ses-num"><span class="sn-lbl">SES</span><span class="sn-val">#${s.id}</span></div>
+      <div class="ses-info">
+        <div class="ses-big ${!s.paciente ? 'empty' : ''}">${s.paciente || 'Sin paciente asignado'}</div>
+        <div class="ses-dates">${(s.inicio||'—').substring(0,16)}${s.fin ? ' → '+(s.fin||'').substring(11,16) : ''}</div>
+        ${s.notas ? `<div class="ses-notes">${s.notas}</div>` : ''}
+      </div>
+    </div>
+    ${assignSection}
+    <div class="tabs-row">
+      <div class="tab ${!assignFormOpen ? 'active' : ''}" onclick="detailTab('superior')" id="tab-btn-superior">Tren Superior</div>
+      <div class="tab" onclick="detailTab('inferior')" id="tab-btn-inferior">Tren Inferior</div>
+      <div class="tab" onclick="detailTab('registro')" id="tab-btn-registro">Registro</div>
+    </div>
+    <div id="tc-superior" class="tab-content show">
+      <div class="joints-grid">
+        ${card('hombro','derecho')}${card('hombro','izquierdo')}
+        ${card('codo','derecho')}${card('codo','izquierdo')}
+      </div>
+    </div>
+    <div id="tc-inferior" class="tab-content">
+      <div class="joints-grid">
+        ${card('cadera','derecho')}${card('cadera','izquierdo')}
+        ${card('rodilla','derecho')}${card('rodilla','izquierdo')}
+        ${card('tobillo','derecho')}${card('tobillo','izquierdo')}
+      </div>
+    </div>
+    <div id="tc-registro" class="tab-content">
+      ${registros.length ? `<div class="tbl-wrap"><table class="reg-table">
+        <thead><tr><th>Hora</th><th>Lado</th><th>Región</th><th>Articulación</th><th>Ejercicio</th><th>Ángulo</th></tr></thead>
+        <tbody>${registros.map(r => `<tr>
+          <td><span class="badge">${r.timestamp}</span></td>
+          <td>${r.lado}</td>
+          <td><span class="region-tag ${r.region === 'superior' ? 'rt-sup' : 'rt-inf'}">${r.region}</span></td>
+          <td>${r.articulacion}</td>
+          <td>${r.ejercicio.replace(/_/g,' ')}</td>
+          <td style="color:var(--cyan);font-family:var(--mono);font-weight:600">${r.angulo}°</td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-txt">Sin registros de movimiento</div></div>'}
+    </div>
+  `;
+
+  document.getElementById('detail-actions').innerHTML = `
+    <button class="btn btn-g" onclick="toggleAssignForm()" style="flex:1">✏️ Asignar</button>
+    <button class="btn btn-p" onclick="downloadSessionById('${s.id}')" style="flex:1">⬇️ Exportar</button>
+    <button class="btn btn-d" onclick="confirmDelete('${s.id}')">🗑️</button>
+  `;
+}
+
+function detailTab(name) {
+  document.querySelectorAll('[id^="tc-"]').forEach(el => el.classList.remove('show'));
+  document.querySelectorAll('[id^="tab-btn-"]').forEach(el => el.classList.remove('active'));
+  document.getElementById('tc-'+name).classList.add('show');
+  document.getElementById('tab-btn-'+name).classList.add('active');
+}
+
+function toggleAssignForm() {
+  assignFormOpen = !assignFormOpen;
+  const s = loadAllSessions().find(x => x.id === currentDetailId);
+  if (s) renderDetail(s);
+}
+
+function guardarAsignacion(id) {
+  const paciente = document.getElementById('fn').value.trim();
+  const notas    = document.getElementById('fno').value.trim();
+  updateSession(id, paciente, notas);
+  assignFormOpen = false;
+  const s = loadAllSessions().find(x => x.id === id);
+  if (s) renderDetail(s);
+  renderSessionsList();
+  showToast('✓ Paciente asignado', true);
+}
+
+function downloadSessionById(id) {
+  const s = loadAllSessions().find(x => x.id === id);
+  if (s) downloadSession(s);
+}
+
+function confirmDelete(id) {
+  if (confirm(`¿Borrar sesión #${id}? Esta acción no se puede deshacer.`)) {
+    deleteSession(id);
+    goBack();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════
+let currentScreen = 'cam';
+
+function showScreen(name) {
+  ['cam','sessions','detail'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('hidden', s !== name);
+  });
+  document.getElementById('nav-cam').classList.toggle('active', name === 'cam');
+  document.getElementById('nav-ses').classList.toggle('active', name === 'sessions' || name === 'detail');
+  document.getElementById('bot-nav').classList.toggle('hidden', name === 'detail');
+  if (name === 'sessions') renderSessionsList();
+  currentScreen = name;
+}
+
+function goBack() {
+  if (currentScreen === 'detail') showScreen('sessions');
+  else showScreen('cam');
+}
+
+// ═══════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, green = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (green ? ' green' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 2500);
+}
+
+// ═══════════════════════════════════════════════════
+// KEYBOARD SUPPORT (for when used on PC also)
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 's' || e.key === 'S') saveSession();
+  if (e.key === 'r' || e.key === 'R') resetSession();
+});
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+document.getElementById('loading').style.transition = 'opacity .4s';
+
+// Check HTTPS (camera requires secure context on mobile)
+if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('https-warn').style.display = 'flex';
+} else {
+  // Wait for MediaPipe scripts to load
+  window.addEventListener('load', () => {
+    setTimeout(initMediaPipe, 500);
+  });
+}
+</script>
+</body>
+</html>
