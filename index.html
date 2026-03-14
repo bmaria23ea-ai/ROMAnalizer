@@ -88,9 +88,10 @@ button { cursor:pointer; }
   margin-bottom:var(--nav-h);
 }
 
-/* Video and canvas both mirrored via CSS — user sees mirror image */
+/* Video: CSS espejo para que el usuario se vea como en un espejo */
 #vid { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
-#cvs { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+/* Canvas: sin CSS espejo — los puntos se espejan en JS al dibujar */
+#cvs { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 
 /* FABs */
 .fab-col { position:absolute; top:12px; right:12px; display:flex; flex-direction:column; gap:8px; z-index:20; }
@@ -661,24 +662,20 @@ function importJSON(inp){
 }
 
 /* ═══════════════════════════════════════════════════
-   MEDIAPIPE
-   Estrategia de espejo:
-   • CSS scaleX(-1) en #vid  → el usuario se ve como espejo
-   • CSS scaleX(-1) en #cvs  → el canvas se muestra también espejado
-   • flipCvs (oculto)        → dibuja el frame espejado y lo manda a MediaPipe
-     → idéntico a Python cv2.flip(frame,1) antes de pose.process()
-   • Los landmarks se dibujan en #cvs SIN transform extra
-     (el CSS ya los coloca correctamente sobre el cuerpo)
-   • El texto se dibuja con counter-mirror para que sea legible
-   • Mapeo de lados: l_ = derecho  (igual que Python tras el flip)
+   MEDIAPIPE — Estrategia de espejo (definitiva)
+   ─────────────────────────────────────────────────
+   • #vid tiene CSS scaleX(-1)  → usuario se ve en espejo
+   • #cvs NO tiene CSS transform → superpone el video tal cual
+   • MediaPipe recibe el video CRUDO (sin flip)
+   • Al dibujar landmarks aplicamos JS scaleX(-1) en el canvas
+     → los puntos quedan sobre el cuerpo correcto
+   • Texto: sin mirror (canvas no está espejado)
+   • Lados: derecho = R_ (12,14,16…), izquierdo = L_ (11,13,15…)
+     porque MediaPipe ve el video crudo (no flipeado)
 ═══════════════════════════════════════════════════ */
 const vid = document.getElementById('vid');
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
-
-// Canvas oculto para enviar frame espejado a MediaPipe
-const flipCvs = document.createElement('canvas');
-const flipCtx = flipCvs.getContext('2d');
 
 let pose, cameraOn=false, poseReady=false;
 
@@ -689,20 +686,24 @@ function onResults(res){
   if(lm&&lm.length>0){
     setStatus('on','Detectando');
 
-    // Dibujar esqueleto — sin transform extra porque el CSS del canvas ya espeja
+    // Dibujar esqueleto espejado en JS para coincidir con el video CSS-espejado
+    ctx.save();
+    ctx.translate(cvs.width,0);
+    ctx.scale(-1,1);
     if(window.drawConnectors&&window.POSE_CONNECTIONS){
       drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'rgba(30,60,200,0.85)',lineWidth:3});
       drawLandmarks(ctx,lm,{color:'#00e5cc',fillColor:'#00e5cc',lineWidth:1,radius:5});
     }
+    ctx.restore();
 
-    // Indices de landmarks (MediaPipe Pose)
+    // Indices de landmarks MediaPipe
     const L={sh:11,el:13,wr:15,hip:23,kn:25,an:27,fi:31};
     const R={sh:12,el:14,wr:16,hip:24,kn:26,an:28,fi:32};
 
-    // LEFT de MediaPipe = derecho del paciente (igual que Python con cv2.flip)
+    // MediaPipe ve video crudo → derecho anatómico = índices R_
     const map={
-      derecho:   {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
-      izquierdo: {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
+      derecho:   {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
+      izquierdo: {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
     };
 
     for(const side of SIDES){
@@ -729,14 +730,10 @@ function onResults(res){
 
   }else{
     setStatus('warn','Sin persona');
-    // Counter-mirror para que el texto sea legible en el canvas espejado
-    ctx.save();
-    ctx.translate(cvs.width,0); ctx.scale(-1,1);
     ctx.fillStyle='rgba(255,68,102,0.9)';
     ctx.font='bold 14px JetBrains Mono,monospace';
     ctx.textAlign='center';
     ctx.fillText('⚠ NO SE DETECTA PERSONA',cvs.width/2,34);
-    ctx.restore();
   }
 }
 
@@ -752,7 +749,6 @@ async function initPose(){
 }
 
 async function startCam(){
-  // Intentar cámara frontal, luego cualquiera
   let stream=null;
   for(const c of [{video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}},{video:true}]){
     try{ stream=await navigator.mediaDevices.getUserMedia(c); break; }catch(e){}
@@ -772,12 +768,9 @@ async function loop(){
   if(!cameraOn) return;
   if(vid.readyState>=2){
     const w=vid.videoWidth||640, h=vid.videoHeight||480;
-    if(cvs.width!==w||cvs.height!==h){ cvs.width=w; cvs.height=h; flipCvs.width=w; flipCvs.height=h; }
-    // Dibujar frame espejado en canvas oculto — igual que cv2.flip(frame,1) en Python
-    flipCtx.save(); flipCtx.translate(w,0); flipCtx.scale(-1,1);
-    flipCtx.drawImage(vid,0,0,w,h);
-    flipCtx.restore();
-    try{ await pose.send({image:flipCvs}); }catch(e){}
+    if(cvs.width!==w||cvs.height!==h){ cvs.width=w; cvs.height=h; }
+    // Enviar video crudo a MediaPipe (sin flip)
+    try{ await pose.send({image:vid}); }catch(e){}
   }
   requestAnimationFrame(loop);
 }
