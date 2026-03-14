@@ -799,6 +799,14 @@ function importJSON(input) {
 const vid = document.getElementById('vid');
 const cvs = document.getElementById('cvs');
 const ctx = cvs.getContext('2d');
+
+// Hidden canvas — we draw the video MIRRORED here and send it to MediaPipe
+// This matches Python's cv2.flip(frame,1) so all math works identically
+const flipCvs = document.createElement('canvas');
+flipCvs.width  = 640;
+flipCvs.height = 480;
+const flipCtx  = flipCvs.getContext('2d');
+
 let poseReady = false;
 
 const COLORS = {
@@ -842,11 +850,10 @@ function onResults(results) {
     };
 
     const sides_lm = {
-      // En web MediaPipe ve video sin espejo, entonces:
-      // derecho anatómico del paciente = landmarks RIGHT (12,14,16...)
-      // izquierdo anatómico del paciente = landmarks LEFT (11,13,15...)
-      derecho:   { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
-      izquierdo: { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
+      // MediaPipe recibe el frame YA espejado (igual que Python con cv2.flip)
+      // entonces LEFT de MediaPipe = derecho anatómico del paciente, igual que en Python
+      derecho:   { sh:lm[IDX.l_sh], el:lm[IDX.l_el], wr:lm[IDX.l_wr], hip:lm[IDX.l_hip], kn:lm[IDX.l_kn], an:lm[IDX.l_an], fi:lm[IDX.l_fi] },
+      izquierdo: { sh:lm[IDX.r_sh], el:lm[IDX.r_el], wr:lm[IDX.r_wr], hip:lm[IDX.r_hip], kn:lm[IDX.r_kn], an:lm[IDX.r_an], fi:lm[IDX.r_fi] },
     };
 
     for (const side of SIDES) {
@@ -884,10 +891,15 @@ function onResults(results) {
   } else {
     detecting = false;
     setStatus('warn', 'Sin persona');
+    // Counter-mirror the text so it reads correctly on the mirrored canvas
+    ctx.save();
+    ctx.translate(cvs.width, 0);
+    ctx.scale(-1, 1);
     ctx.fillStyle = 'rgba(255,68,102,0.85)';
     ctx.font = 'bold 15px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('⚠ NO SE DETECTA PERSONA', cvs.width / 2, 36);
+    ctx.restore();
   }
 }
 
@@ -953,18 +965,25 @@ async function startCamera() {
   setTimeout(() => document.getElementById('loading').style.display = 'none', 400);
   setStatus('warn', 'Buscando...');
 
-  // Manual RAF loop — more reliable than Camera utility on mobile
+  // Manual RAF loop — send MIRRORED frame to MediaPipe (matches Python cv2.flip)
   async function loop() {
     if (!cameraRunning) return;
     if (vid.readyState >= 2) {
-      // Sync canvas size to video
-      if (cvs.width !== vid.videoWidth || cvs.height !== vid.videoHeight) {
-        cvs.width  = vid.videoWidth  || 640;
-        cvs.height = vid.videoHeight || 480;
+      const w = vid.videoWidth  || 640;
+      const h = vid.videoHeight || 480;
+      if (cvs.width !== w || cvs.height !== h) {
+        cvs.width = w; cvs.height = h;
+        flipCvs.width = w; flipCvs.height = h;
       }
-      try {
-        await poseInstance.send({ image: vid });
-      } catch (e) { /* ignore single frame errors */ }
+      // Draw mirrored frame on hidden canvas
+      flipCtx.save();
+      flipCtx.translate(w, 0);
+      flipCtx.scale(-1, 1);
+      flipCtx.drawImage(vid, 0, 0, w, h);
+      flipCtx.restore();
+      // Send mirrored frame to MediaPipe (identical to Python cv2.flip)
+      try { await poseInstance.send({ image: flipCvs }); }
+      catch (e) { /* ignore single frame errors */ }
     }
     rafId = requestAnimationFrame(loop);
   }
