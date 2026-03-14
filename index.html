@@ -88,9 +88,9 @@ button { cursor:pointer; }
   margin-bottom:var(--nav-h);
 }
 
-/* Video y canvas con el mismo CSS espejo — quedan perfectamente alineados */
+/* Video CSS espejo → usuario se ve en espejo. Canvas sin CSS → JS maneja el espejo al dibujar */
 #vid { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
-#cvs { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+#cvs { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 
 /* FABs */
 .fab-col { position:absolute; top:12px; right:12px; display:flex; flex-direction:column; gap:8px; z-index:20; }
@@ -685,21 +685,24 @@ function onResults(res){
   if(lm&&lm.length>0){
     setStatus('on','Detectando');
 
-    // Sin JS transform — el CSS scaleX(-1) del canvas ya espeja los puntos
-    // para que queden sobre el cuerpo en el video (también CSS-espejado)
+    // El canvas NO tiene CSS mirror. Aplicamos JS mirror solo al dibujar
+    // para que los puntos coincidan con el video (que SÍ tiene CSS mirror)
+    ctx.save();
+    ctx.translate(cvs.width, 0);
+    ctx.scale(-1, 1);
     if(window.drawConnectors&&window.POSE_CONNECTIONS){
       drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'rgba(30,60,200,0.85)',lineWidth:3});
       drawLandmarks(ctx,lm,{color:'#00e5cc',fillColor:'#00e5cc',lineWidth:1,radius:5});
     }
+    ctx.restore();
 
     const L={sh:11,el:13,wr:15,hip:23,kn:25,an:27,fi:31};
     const R={sh:12,el:14,wr:16,hip:24,kn:26,an:28,fi:32};
 
-    // Canvas CSS-espejado: L_ de MediaPipe aparece a la derecha de pantalla
-    // = lado derecho del paciente (igual que Python con cv2.flip)
+    // MediaPipe recibe video crudo → R_ = derecho anatómico del paciente
     const map={
-      derecho:   {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
-      izquierdo: {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
+      derecho:   {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
+      izquierdo: {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
     };
 
     for(const side of SIDES){
@@ -726,14 +729,10 @@ function onResults(res){
 
   }else{
     setStatus('warn','Sin persona');
-    // Counter-mirror para que el texto sea legible (el canvas está CSS-espejado)
-    ctx.save();
-    ctx.translate(cvs.width,0); ctx.scale(-1,1);
     ctx.fillStyle='rgba(255,68,102,0.9)';
     ctx.font='bold 14px JetBrains Mono,monospace';
     ctx.textAlign='center';
     ctx.fillText('⚠ NO SE DETECTA PERSONA',cvs.width/2,34);
-    ctx.restore();
   }
 }
 
