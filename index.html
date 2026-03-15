@@ -541,6 +541,10 @@ function analyzeAnkle(kn,an,fi){
 }
 
 // ── ESTADO ────────────────────────────────────────
+function localISO(d=new Date()){
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 const SIDES=['derecho','izquierdo'];
 const JOINTS=['hombro','codo','cadera','rodilla','tobillo'];
 const J_SUP=['hombro','codo'],J_INF=['cadera','rodilla','tobillo'];
@@ -565,7 +569,7 @@ function updateJoint(side,joint,ex,angle){
 }
 function tick(){
   if(++ticks%30!==0) return;
-  if(!sesStart) sesStart=new Date().toISOString().replace('T',' ').slice(0,19);
+  if(!sesStart) sesStart=localISO();
   const ts=new Date().toTimeString().slice(0,8);
   for(const side of SIDES) for(const j of JOINTS){
     const d=jData[side][j];
@@ -584,7 +588,7 @@ function loadAll(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch{
 function saveAll(a){localStorage.setItem(LS,JSON.stringify(a));}
 function nextId(){const ids=loadAll().map(s=>parseInt(s.id)||0);return String(Math.max(0,...ids)+1);}
 function saveSession(){
-  const sid=nextId(),now=new Date().toISOString().replace('T',' ').slice(0,19);
+  const sid=nextId(),now=localISO();
   const maxMin={};
   for(const side of SIDES) for(const j of JOINTS){
     const d=jData[side][j];
