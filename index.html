@@ -488,7 +488,11 @@ const META = {
 };
 
 function detectPlane(sh,el){
-  const ax=Math.abs(el.x-sh.x), ay=Math.abs(el.y-sh.y);
+  // Igual que Python: normalizar el vector 3D antes de comparar umbrales
+  let vx=el.x-sh.x, vy=el.y-sh.y, vz=(el.z||0)-(sh.z||0);
+  const n=Math.sqrt(vx*vx+vy*vy+vz*vz)+1e-6;
+  vx/=n; vy/=n;
+  const ax=Math.abs(vx), ay=Math.abs(vy);
   if(ay>0.55) return 'sagital';
   if(ax>0.55) return 'frontal';
   return 'mixto';
