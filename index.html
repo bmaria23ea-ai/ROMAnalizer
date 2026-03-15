@@ -440,15 +440,12 @@ tbody tr:last-child td { border-bottom:none; }
 <script>
 'use strict';
 
-/* ═══════════════════════════════════════════════════
-   MATH  (portado de Python)
-═══════════════════════════════════════════════════ */
-const DEG = r => r * 180 / Math.PI;
-
+// ── MATH ──────────────────────────────────────────
+const DEG=r=>r*180/Math.PI;
 function vNorm(v){ return Math.sqrt(v.reduce((s,x)=>s+x*x,0)); }
 function vDot(a,b){ return a.reduce((s,x,i)=>s+x*b[i],0); }
 function vecAngle(v1,v2){
-  const n1=vNorm(v1), n2=vNorm(v2);
+  const n1=vNorm(v1),n2=vNorm(v2);
   if(n1<1e-6||n2<1e-6) return 0;
   return DEG(Math.acos(Math.max(-1,Math.min(1,vDot(v1,v2)/(n1*n2)))));
 }
@@ -467,34 +464,27 @@ function smoothAngle(buf,val,maxLen=5,clip=15){
   return buf.reduce((s,v)=>s+v,0)/buf.length;
 }
 
-/* ═══════════════════════════════════════════════════
-   ANÁLISIS DE ARTICULACIONES  (portado de Python)
-═══════════════════════════════════════════════════ */
-const THR = 12, VIS = 0.50;
-
-const META = {
-  flexion_hombro:          {n:'Flexión',       r:'superior'},
-  extension_hombro:        {n:'Extensión',     r:'superior'},
-  abduccion_hombro:        {n:'Abducción',     r:'superior'},
-  flexion_codo:            {n:'Flexión',       r:'superior'},
-  extension_codo:          {n:'Extensión',     r:'superior'},
-  flexion_cadera:          {n:'Flexión',       r:'inferior'},
-  extension_cadera:        {n:'Extensión',     r:'inferior'},
-  abduccion_cadera:        {n:'Abducción',     r:'inferior'},
-  flexion_rodilla:         {n:'Flexión',       r:'inferior'},
-  extension_rodilla:       {n:'Extensión',     r:'inferior'},
-  dorsiflexion_tobillo:    {n:'Dorsiflexión',  r:'inferior'},
-  flexion_plantar_tobillo: {n:'Flex.Plantar',  r:'inferior'},
+// ── ANÁLISIS (idéntico al Python original) ────────
+const THR=12, VIS=0.50;
+const META={
+  flexion_hombro:          {n:'Flexión',      r:'superior'},
+  extension_hombro:        {n:'Extensión',    r:'superior'},
+  abduccion_hombro:        {n:'Abducción',    r:'superior'},
+  flexion_codo:            {n:'Flexión',      r:'superior'},
+  extension_codo:          {n:'Extensión',    r:'superior'},
+  flexion_cadera:          {n:'Flexión',      r:'inferior'},
+  extension_cadera:        {n:'Extensión',    r:'inferior'},
+  abduccion_cadera:        {n:'Abducción',    r:'inferior'},
+  flexion_rodilla:         {n:'Flexión',      r:'inferior'},
+  extension_rodilla:       {n:'Extensión',    r:'inferior'},
+  dorsiflexion_tobillo:    {n:'Dorsiflexión', r:'inferior'},
+  flexion_plantar_tobillo: {n:'Flex.Plantar', r:'inferior'},
 };
-
 function detectPlane(sh,el){
-  // Igual que Python: normalizar el vector 3D antes de comparar umbrales
-  let vx=el.x-sh.x, vy=el.y-sh.y, vz=(el.z||0)-(sh.z||0);
+  let vx=el.x-sh.x,vy=el.y-sh.y,vz=(el.z||0)-(sh.z||0);
   const n=Math.sqrt(vx*vx+vy*vy+vz*vz)+1e-6;
-  vx/=n; vy/=n;
-  const ax=Math.abs(vx), ay=Math.abs(vy);
-  if(ay>0.55) return 'sagital';
-  if(ax>0.55) return 'frontal';
+  if(Math.abs(vy/n)>0.55) return 'sagital';
+  if(Math.abs(vx/n)>0.55) return 'frontal';
   return 'mixto';
 }
 function analyzeShoulder(sh,el,hip){
@@ -511,8 +501,7 @@ function analyzeShoulder(sh,el,hip){
     }
   }
   if(plane==='frontal'||plane==='mixto'){
-    const hd=Math.abs(el.x-sh.x), vd=Math.abs(el.y-sh.y);
-    if(hd>vd*0.45&&abd>THR) return ['abduccion_hombro',abd];
+    if(Math.abs(el.x-sh.x)>Math.abs(el.y-sh.y)*0.45&&abd>THR) return ['abduccion_hombro',abd];
   }
   return [null,0];
 }
@@ -523,19 +512,15 @@ function analyzeElbow(sh,el,wr){
   return [null,0];
 }
 function analyzeHip(sh,hip,kn,side){
-  // flexion
   const ref={x:hip.x,y:hip.y-0.2};
-  const flex=kn.y<hip.y-0.05 ? Math.min(angle2d(ref,hip,kn),125) : 0;
-  // extension
-  const trunk=[sh.x-hip.x,sh.y-hip.y], leg=[kn.x-hip.x,kn.y-hip.y];
-  const extA=vecAngle(trunk,leg);
-  const ext=(kn.y>hip.y&&Math.abs(kn.x-hip.x)>Math.abs(kn.y-hip.y)*0.2) ? Math.min(180-extA,60) : 0;
-  // abduction
-  const abdA=vecAngle(trunk,leg);
+  const flex=kn.y<hip.y-0.05?Math.min(angle2d(ref,hip,kn),125):0;
+  const trunk=[sh.x-hip.x,sh.y-hip.y],leg=[kn.x-hip.x,kn.y-hip.y];
+  const va=vecAngle(trunk,leg);
+  const ext=(kn.y>hip.y&&Math.abs(kn.x-hip.x)>Math.abs(kn.y-hip.y)*0.2)?Math.min(180-va,60):0;
   let abd=0;
   if(Math.abs(kn.x-hip.x)>Math.abs(kn.y-hip.y)*0.5){
-    if(side==='derecho'&&kn.x<hip.x) abd=abdA;
-    if(side==='izquierdo'&&kn.x>hip.x) abd=abdA;
+    if(side==='derecho'&&kn.x<hip.x) abd=va;
+    if(side==='izquierdo'&&kn.x>hip.x) abd=va;
   }
   if(flex>THR&&flex>abd&&flex>ext) return ['flexion_cadera',flex];
   if(ext>THR&&ext>abd)             return ['extension_cadera',ext];
@@ -543,29 +528,26 @@ function analyzeHip(sh,hip,kn,side){
   return [null,0];
 }
 function analyzeKnee(hip,kn,an){
-  const flex=Math.max(0,Math.min(150,180-vecAngle([hip.x-kn.x,hip.y-kn.y],[an.x-kn.x,an.y-kn.y])));
+  const ul=[hip.x-kn.x,hip.y-kn.y],ll=[an.x-kn.x,an.y-kn.y];
+  const ang=vecAngle(ul,ll);
+  const flex=Math.max(0,Math.min(150,180-ang));
   if(flex>10) return ['flexion_rodilla',flex];
-  const ang=vecAngle([hip.x-kn.x,hip.y-kn.y],[an.x-kn.x,an.y-kn.y]);
   return ['extension_rodilla',ang>160?0:180-ang];
 }
 function analyzeAnkle(kn,an,fi){
   const ang=vecAngle([kn.x-an.x,kn.y-an.y],[fi.x-an.x,fi.y-an.y]);
-  if(fi.y<an.y){ const d=Math.min(ang,30); return d>=25?['dorsiflexion_tobillo',d]:[null,0]; }
-  const p=Math.min(180-ang,60); return p>=25?['flexion_plantar_tobillo',p]:[null,0];
+  if(fi.y<an.y){const d=Math.min(ang,30);return d>=25?['dorsiflexion_tobillo',d]:[null,0];}
+  const p=Math.min(180-ang,60);return p>=25?['flexion_plantar_tobillo',p]:[null,0];
 }
 
-/* ═══════════════════════════════════════════════════
-   ESTADO DE LA SESIÓN
-═══════════════════════════════════════════════════ */
-const SIDES  = ['derecho','izquierdo'];
-const JOINTS = ['hombro','codo','cadera','rodilla','tobillo'];
-const J_SUP  = ['hombro','codo'];
-const J_INF  = ['cadera','rodilla','tobillo'];
-const COLS   = {hombro:'var(--blue)',codo:'var(--cyan)',cadera:'var(--orange)',rodilla:'var(--green)',tobillo:'var(--purple)'};
-
+// ── ESTADO ────────────────────────────────────────
+const SIDES=['derecho','izquierdo'];
+const JOINTS=['hombro','codo','cadera','rodilla','tobillo'];
+const J_SUP=['hombro','codo'],J_INF=['cadera','rodilla','tobillo'];
+const COLS={hombro:'var(--blue)',codo:'var(--cyan)',cadera:'var(--orange)',rodilla:'var(--green)',tobillo:'var(--purple)'};
 function mkState(){
   const s={};
-  for(const side of SIDES){ s[side]={};
+  for(const side of SIDES){s[side]={};
     for(const j of JOINTS) s[side][j]={buf:[],angle:0,max:0,min:180,exercise:'reposo'};
   }
   return s;
@@ -575,17 +557,11 @@ function mkMovs(){
   for(const side of SIDES) for(const j of JOINTS) m[`${j}_${side}`]={};
   return m;
 }
-
-let jData      = mkState();
-let registro   = [];
-let movs       = mkMovs();
-let ticks      = 0;
-let sesStart   = null;
-
+let jData=mkState(),registro=[],movs=mkMovs(),ticks=0,sesStart=null;
 function updateJoint(side,joint,ex,angle){
   const d=jData[side][joint];
-  d.exercise=ex; d.angle=smoothAngle(d.buf,angle);
-  if(ex!=='reposo'&&d.angle>0){ d.max=Math.max(d.max,d.angle); d.min=Math.min(d.min,d.angle); }
+  d.exercise=ex;d.angle=smoothAngle(d.buf,angle);
+  if(ex!=='reposo'&&d.angle>0){d.max=Math.max(d.max,d.angle);d.min=Math.min(d.min,d.angle);}
 }
 function tick(){
   if(++ticks%30!==0) return;
@@ -602,134 +578,92 @@ function tick(){
   }
 }
 
-/* ═══════════════════════════════════════════════════
-   STORAGE (localStorage — mismo formato JSON que Python)
-═══════════════════════════════════════════════════ */
-const LS = 'rom_sessions';
-function loadAll(){ try{ return JSON.parse(localStorage.getItem(LS)||'[]'); }catch{ return []; } }
-function saveAll(a){ localStorage.setItem(LS,JSON.stringify(a)); }
-function nextId(){ const ids=loadAll().map(s=>parseInt(s.id)||0); return String(Math.max(0,...ids)+1); }
-
+// ── STORAGE ───────────────────────────────────────
+const LS='rom_sessions';
+function loadAll(){try{return JSON.parse(localStorage.getItem(LS)||'[]');}catch{return[];}}
+function saveAll(a){localStorage.setItem(LS,JSON.stringify(a));}
+function nextId(){const ids=loadAll().map(s=>parseInt(s.id)||0);return String(Math.max(0,...ids)+1);}
 function saveSession(){
-  const sid=nextId(), now=new Date().toISOString().replace('T',' ').slice(0,19);
+  const sid=nextId(),now=new Date().toISOString().replace('T',' ').slice(0,19);
   const maxMin={};
   for(const side of SIDES) for(const j of JOINTS){
     const d=jData[side][j];
     maxMin[`${j}_${side}`]={max:Math.round(d.max*100)/100,min:d.min<180?Math.round(d.min*100)/100:0};
   }
-  const ses={
-    id:sid, inicio:sesStart||now, fin:now,
-    paciente:'', notas:'', tipo:'gonio_fullbody',
-    max_min:maxMin,
-    movimientos_detectados:JSON.parse(JSON.stringify(movs)),
-    registro:[...registro]
-  };
-  const all=loadAll(); all.unshift(ses); saveAll(all);
-  // reset buffers
-  registro=[]; movs=mkMovs(); sesStart=null;
-  // flash
+  const ses={id:sid,inicio:sesStart||now,fin:now,paciente:'',notas:'',tipo:'gonio_fullbody',
+    max_min:maxMin,movimientos_detectados:JSON.parse(JSON.stringify(movs)),registro:[...registro]};
+  const all=loadAll();all.unshift(ses);saveAll(all);
+  registro=[];movs=mkMovs();sesStart=null;
   const fl=document.getElementById('flash');
-  fl.classList.add('show'); setTimeout(()=>fl.classList.remove('show'),300);
-  toast(`✓ Sesión #${sid} guardada`,true);
-  renderSesList();
+  fl.classList.add('show');setTimeout(()=>fl.classList.remove('show'),300);
+  toast(`✓ Sesión #${sid} guardada`,true);renderSesList();
 }
-function resetSession(){
-  jData=mkState(); registro=[]; movs=mkMovs(); sesStart=null; ticks=0;
-  toast('🔄 Reset completo');
-}
-function updateSes(id,paciente,notas){
-  const all=loadAll(), s=all.find(x=>x.id===id);
-  if(s){ s.paciente=paciente; s.notas=notas; } saveAll(all);
-}
-function deleteSes(id){ saveAll(loadAll().filter(s=>s.id!==id)); renderSesList(); toast('Sesión eliminada'); }
+function resetSession(){jData=mkState();registro=[];movs=mkMovs();sesStart=null;ticks=0;toast('🔄 Reset completo');}
+function updateSes(id,p,n){const all=loadAll(),s=all.find(x=>x.id===id);if(s){s.paciente=p;s.notas=n;}saveAll(all);}
+function deleteSes(id){saveAll(loadAll().filter(s=>s.id!==id));renderSesList();toast('Sesión eliminada');}
 function exportSes(id){
-  const s=loadAll().find(x=>x.id===id); if(!s) return;
+  const s=loadAll().find(x=>x.id===id);if(!s)return;
   const name=s.paciente?`sesion_${s.id}_${s.paciente.replace(/\s+/g,'_')}.json`:`sesion_${s.id}.json`;
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(s,null,4)],{type:'application/json'}));
-  a.download=name; a.click();
+  a.download=name;a.click();
 }
 function importJSON(inp){
-  const f=inp.files[0]; if(!f) return;
+  const f=inp.files[0];if(!f)return;
   const r=new FileReader();
   r.onload=e=>{
     try{
-      const d=JSON.parse(e.target.result);
-      if(!d.id) throw 0;
+      const d=JSON.parse(e.target.result);if(!d.id)throw 0;
       const all=loadAll();
-      if(all.find(s=>s.id===d.id)){ toast('⚠ Sesión ya existe'); return; }
-      all.unshift(d); saveAll(all); renderSesList(); toast('✓ Sesión importada',true);
-    }catch{ toast('⚠ Archivo inválido'); }
+      if(all.find(s=>s.id===d.id)){toast('⚠ Sesión ya existe');return;}
+      all.unshift(d);saveAll(all);renderSesList();toast('✓ Sesión importada',true);
+    }catch{toast('⚠ Archivo inválido');}
   };
-  r.readAsText(f); inp.value='';
+  r.readAsText(f);inp.value='';
 }
 
-/* ═══════════════════════════════════════════════════
-   MEDIAPIPE — Estrategia de espejo (definitiva)
-   ─────────────────────────────────────────────────
-   • #vid tiene CSS scaleX(-1)  → usuario se ve en espejo
-   • #cvs NO tiene CSS transform → superpone el video tal cual
-   • MediaPipe recibe el video CRUDO (sin flip)
-   • Al dibujar landmarks aplicamos JS scaleX(-1) en el canvas
-     → los puntos quedan sobre el cuerpo correcto
-   • Texto: sin mirror (canvas no está espejado)
-   • Lados: derecho = R_ (12,14,16…), izquierdo = L_ (11,13,15…)
-     porque MediaPipe ve el video crudo (no flipeado)
-═══════════════════════════════════════════════════ */
-const vid = document.getElementById('vid');
-const cvs = document.getElementById('cvs');
-const ctx = cvs.getContext('2d');
-
-let pose, cameraOn=false, poseReady=false;
+// ── MEDIAPIPE ─────────────────────────────────────
+// #vid CSS scaleX(-1) → usuario ve espejo
+// #cvs sin CSS → JS espeja el dibujo para alinear puntos con el video
+// MediaPipe recibe video crudo → R_=derecho, L_=izquierdo
+const vid=document.getElementById('vid');
+const cvs=document.getElementById('cvs');
+const ctx=cvs.getContext('2d');
+let pose,cameraOn=false,poseReady=false;
 
 function onResults(res){
   ctx.clearRect(0,0,cvs.width,cvs.height);
   const lm=res.poseLandmarks;
-
   if(lm&&lm.length>0){
     setStatus('on','Detectando');
-
-    // El canvas NO tiene CSS mirror. Aplicamos JS mirror solo al dibujar
-    // para que los puntos coincidan con el video (que SÍ tiene CSS mirror)
     ctx.save();
-    ctx.translate(cvs.width, 0);
-    ctx.scale(-1, 1);
+    ctx.translate(cvs.width,0);ctx.scale(-1,1);
     if(window.drawConnectors&&window.POSE_CONNECTIONS){
       drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'rgba(30,60,200,0.85)',lineWidth:3});
       drawLandmarks(ctx,lm,{color:'#00e5cc',fillColor:'#00e5cc',lineWidth:1,radius:5});
     }
     ctx.restore();
-
     const L={sh:11,el:13,wr:15,hip:23,kn:25,an:27,fi:31};
     const R={sh:12,el:14,wr:16,hip:24,kn:26,an:28,fi:32};
-
     const map={
-      derecho:   {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
-      izquierdo: {sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
+      derecho:  {sh:lm[R.sh],el:lm[R.el],wr:lm[R.wr],hip:lm[R.hip],kn:lm[R.kn],an:lm[R.an],fi:lm[R.fi]},
+      izquierdo:{sh:lm[L.sh],el:lm[L.el],wr:lm[L.wr],hip:lm[L.hip],kn:lm[L.kn],an:lm[L.an],fi:lm[L.fi]},
     };
-
     for(const side of SIDES){
       const {sh,el,wr,hip,kn,an,fi}=map[side];
-      const visSup=Math.min(sh.visibility||0,el.visibility||0,wr.visibility||0);
-      const visInf=Math.min(hip.visibility||0,kn.visibility||0,an.visibility||0);
-
-      if(visSup>=VIS){
-        const [exS,aS]=analyzeShoulder(sh,el,hip); updateJoint(side,'hombro',exS||'reposo',aS);
-        const [exE,aE]=analyzeElbow(sh,el,wr);     updateJoint(side,'codo',  exE||'reposo',aE);
-      }else{
-        updateJoint(side,'hombro','reposo',0); updateJoint(side,'codo','reposo',0);
-      }
-      if(visInf>=VIS){
-        const [exH,aH]=analyzeHip(sh,hip,kn,side); updateJoint(side,'cadera', exH||'reposo',aH);
-        const [exK,aK]=analyzeKnee(hip,kn,an);     updateJoint(side,'rodilla',exK||'reposo',aK);
-        const [exA,aA]=analyzeAnkle(kn,an,fi);     updateJoint(side,'tobillo',exA||'reposo',aA);
-      }else{
-        updateJoint(side,'cadera','reposo',0); updateJoint(side,'rodilla','reposo',0); updateJoint(side,'tobillo','reposo',0);
-      }
+      const vs=Math.min(sh.visibility||0,el.visibility||0,wr.visibility||0);
+      const vi=Math.min(hip.visibility||0,kn.visibility||0,an.visibility||0);
+      if(vs>=VIS){
+        const[exS,aS]=analyzeShoulder(sh,el,hip);updateJoint(side,'hombro',exS||'reposo',aS);
+        const[exE,aE]=analyzeElbow(sh,el,wr);    updateJoint(side,'codo',  exE||'reposo',aE);
+      }else{updateJoint(side,'hombro','reposo',0);updateJoint(side,'codo','reposo',0);}
+      if(vi>=VIS){
+        const[exH,aH]=analyzeHip(sh,hip,kn,side);updateJoint(side,'cadera', exH||'reposo',aH);
+        const[exK,aK]=analyzeKnee(hip,kn,an);    updateJoint(side,'rodilla',exK||'reposo',aK);
+        const[exA,aA]=analyzeAnkle(kn,an,fi);    updateJoint(side,'tobillo',exA||'reposo',aA);
+      }else{updateJoint(side,'cadera','reposo',0);updateJoint(side,'rodilla','reposo',0);updateJoint(side,'tobillo','reposo',0);}
     }
-    tick();
-    renderAP();
-
+    tick();renderAP();
   }else{
     setStatus('warn','Sin persona');
     ctx.fillStyle='rgba(255,68,102,0.9)';
@@ -738,78 +672,67 @@ function onResults(res){
     ctx.fillText('⚠ NO SE DETECTA PERSONA',cvs.width/2,34);
   }
 }
-
 async function initPose(){
   ldMsg('Cargando modelo de pose…');
   pose=new Pose({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${f}`});
-  pose.setOptions({modelComplexity:1,smoothLandmarks:true,enableSegmentation:false,smoothSegmentation:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+  pose.setOptions({modelComplexity:1,smoothLandmarks:true,enableSegmentation:false,
+    smoothSegmentation:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
   pose.onResults(onResults);
   ldMsg('Inicializando modelo WASM…');
   await pose.initialize();
   ldMsg('Activando cámara…');
   await startCam();
 }
-
 async function startCam(){
   let stream=null;
   for(const c of [{video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}},{video:true}]){
-    try{ stream=await navigator.mediaDevices.getUserMedia(c); break; }catch(e){}
+    try{stream=await navigator.mediaDevices.getUserMedia(c);break;}catch(e){}
   }
   if(!stream) throw new Error('No se pudo acceder a la cámara');
   vid.srcObject=stream;
-  await new Promise(res=>{ vid.onloadedmetadata=res; });
+  await new Promise(res=>{vid.onloadedmetadata=res;});
   await vid.play();
-  cameraOn=true; poseReady=true;
+  cameraOn=true;poseReady=true;
   document.getElementById('ld').style.opacity='0';
   setTimeout(()=>document.getElementById('ld').style.display='none',400);
   setStatus('warn','Buscando…');
   loop();
 }
-
 async function loop(){
   if(!cameraOn) return;
   if(vid.readyState>=2){
-    const w=vid.videoWidth||640, h=vid.videoHeight||480;
-    if(cvs.width!==w||cvs.height!==h){ cvs.width=w; cvs.height=h; }
-    // Enviar video crudo a MediaPipe (sin flip)
-    try{ await pose.send({image:vid}); }catch(e){}
+    const w=vid.videoWidth||640,h=vid.videoHeight||480;
+    if(cvs.width!==w||cvs.height!==h){cvs.width=w;cvs.height=h;}
+    try{await pose.send({image:vid});}catch(e){}
   }
   requestAnimationFrame(loop);
 }
 
-/* ═══════════════════════════════════════════════════
-   UI — PANEL DE ÁNGULOS
-═══════════════════════════════════════════════════ */
+// ── UI: PANEL DE ÁNGULOS ──────────────────────────
 function renderAP(){
-  document.getElementById('ap-sup').innerHTML = J_SUP.flatMap(j=>SIDES.map(s=>apCard(j,s))).join('');
-  document.getElementById('ap-inf').innerHTML = J_INF.flatMap(j=>SIDES.map(s=>apCard(j,s))).join('');
+  document.getElementById('ap-sup').innerHTML=J_SUP.flatMap(j=>SIDES.map(s=>apCard(j,s))).join('');
+  document.getElementById('ap-inf').innerHTML=J_INF.flatMap(j=>SIDES.map(s=>apCard(j,s))).join('');
 }
 function apCard(j,side){
-  const d=jData[side][j], col=COLS[j];
-  const active=d.exercise!=='reposo';
-  const ex=active?(META[d.exercise]?.n||d.exercise):'—';
+  const d=jData[side][j],col=COLS[j],active=d.exercise!=='reposo';
   return `<div class="apc">
     <div class="apc-lbl">${j.toUpperCase()}·${side==='derecho'?'D':'I'}</div>
     <div class="apc-val" style="color:${active?col:'var(--txt3)'}">${active?Math.round(d.angle):0}<span>°</span></div>
-    <div class="apc-ex"  style="color:${active?col:'var(--txt3)'}">${ex}</div>
+    <div class="apc-ex"  style="color:${active?col:'var(--txt3)'}">${active?(META[d.exercise]?.n||d.exercise):'—'}</div>
     <div class="apc-max">MAX ${Math.round(d.max)}°</div>
   </div>`;
 }
 
-/* ═══════════════════════════════════════════════════
-   UI — LISTA DE SESIONES
-═══════════════════════════════════════════════════ */
+// ── UI: SESIONES ──────────────────────────────────
 let qFilter='';
-function filterSes(v){ qFilter=v; renderSesList(); }
-
+function filterSes(v){qFilter=v;renderSesList();}
 function renderSesList(){
-  const all=loadAll();
-  const q=qFilter.toLowerCase();
+  const all=loadAll(),q=qFilter.toLowerCase();
   const list=q?all.filter(s=>(s.paciente||'').toLowerCase().includes(q)||s.id.includes(q)):all;
   document.getElementById('ses-count').textContent=`${list.length} sesión${list.length!==1?'es':''}`;
   const el=document.getElementById('ses-list');
   if(!list.length){
-    el.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-txt">${q?`Sin resultados para "${q}"`:'No hay sesiones guardadas.\nGuarda una sesión desde la cámara.'}</div></div>`;
+    el.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-txt">${q?`Sin resultados para "${q}"`:'No hay sesiones guardadas.'}</div></div>`;
     return;
   }
   el.innerHTML=list.map(s=>`
@@ -820,26 +743,16 @@ function renderSesList(){
     </div>`).join('');
 }
 
-/* ═══════════════════════════════════════════════════
-   UI — DETALLE DE SESIÓN
-═══════════════════════════════════════════════════ */
-let detId=null, formOpen=false;
-
-function openDet(id){
-  detId=id; formOpen=false;
-  document.getElementById('det-title').textContent=`Sesión #${id}`;
-  renderDet(); goScreen('det');
-}
-
+// ── UI: DETALLE ───────────────────────────────────
+let detId=null,formOpen=false;
+function openDet(id){detId=id;formOpen=false;document.getElementById('det-title').textContent=`Sesión #${id}`;renderDet();goScreen('det');}
 function renderDet(){
-  const s=loadAll().find(x=>x.id===detId); if(!s) return;
-
+  const s=loadAll().find(x=>x.id===detId);if(!s)return;
   function jCard(j,side){
-    const k=`${j}_${side}`, d=s.max_min?.[k]||{max:0,min:0}, col=COLS[j];
+    const k=`${j}_${side}`,d=s.max_min?.[k]||{max:0,min:0},col=COLS[j];
     const entries=Object.entries(s.movimientos_detectados?.[k]||{});
-    const sl=side==='derecho'?'DER.':'IZQ.';
     return `<div class="jcard">
-      <div class="jcard-ttl"><span class="dot2" style="background:${col}"></span>${j.toUpperCase()} · ${sl}</div>
+      <div class="jcard-ttl"><span class="dot2" style="background:${col}"></span>${j.toUpperCase()} · ${side==='derecho'?'DER.':'IZQ.'}</div>
       <div class="jbody">
         <div><div class="jval-lbl">Máximo</div><div class="jval-num" style="color:${col}">${(d.max||0).toFixed(0)}</div><div class="jval-unit">grados</div></div>
         <div><div class="jval-lbl">Mínimo act.</div><div class="jval-num">${d.min>0?d.min.toFixed(0):'—'}</div><div class="jval-unit">grados</div></div>
@@ -847,19 +760,7 @@ function renderDet(){
       ${entries.length?`<div class="divider"></div>${entries.map(([ex,a])=>`<div class="mv-row"><div class="mv-name">${ex.replace(/_/g,' ')}</div><div class="mv-ang" style="color:${col}">${parseFloat(a).toFixed(0)}°</div></div>`).join('')}`:''}
     </div>`;
   }
-
   const regs=s.registro||[];
-  const form=formOpen?`
-    <div class="aform">
-      <div class="aform-title">Asignar paciente — Sesión #${s.id}</div>
-      <div class="field"><label>Nombre</label><input type="text" id="fn" value="${s.paciente||''}" placeholder="Ej: Carlos Mendoza"></div>
-      <div class="field"><label>Notas clínicas</label><textarea id="fno" placeholder="Diagnóstico, observaciones…">${s.notas||''}</textarea></div>
-      <div class="btn-row">
-        <button class="btn btn-p" onclick="guardar('${s.id}')">Guardar</button>
-        <button class="btn btn-g" onclick="toggleForm()">Cancelar</button>
-      </div>
-    </div>`:'';
-
   document.getElementById('det-body').innerHTML=`
     <div class="shd-card">
       <div class="snum"><span class="snum-l">SES</span><span class="snum-v">#${s.id}</span></div>
@@ -869,114 +770,91 @@ function renderDet(){
         ${s.notas?`<div class="snotes">${s.notas}</div>`:''}
       </div>
     </div>
-    ${form}
+    ${formOpen?`<div class="aform">
+      <div class="aform-title">Asignar paciente — Sesión #${s.id}</div>
+      <div class="field"><label>Nombre</label><input type="text" id="fn" value="${s.paciente||''}" placeholder="Ej: Carlos Mendoza"></div>
+      <div class="field"><label>Notas clínicas</label><textarea id="fno" placeholder="Diagnóstico, observaciones…">${s.notas||''}</textarea></div>
+      <div class="btn-row">
+        <button class="btn btn-p" onclick="guardar('${s.id}')">Guardar</button>
+        <button class="btn btn-g" onclick="toggleForm()">Cancelar</button>
+      </div>
+    </div>`:''}
     <div class="tabs-row">
       <div class="tab on" id="tb-sup" onclick="detTab('sup')">Tren Superior</div>
       <div class="tab"    id="tb-inf" onclick="detTab('inf')">Tren Inferior</div>
       <div class="tab"    id="tb-reg" onclick="detTab('reg')">Registro</div>
     </div>
-    <div class="tc on" id="tc-sup">
-      <div class="jgrid">
-        ${jCard('hombro','derecho')}${jCard('hombro','izquierdo')}
-        ${jCard('codo','derecho')}${jCard('codo','izquierdo')}
-      </div>
-    </div>
-    <div class="tc" id="tc-inf">
-      <div class="jgrid">
-        ${jCard('cadera','derecho')}${jCard('cadera','izquierdo')}
-        ${jCard('rodilla','derecho')}${jCard('rodilla','izquierdo')}
-        ${jCard('tobillo','derecho')}${jCard('tobillo','izquierdo')}
-      </div>
-    </div>
+    <div class="tc on" id="tc-sup"><div class="jgrid">
+      ${jCard('hombro','derecho')}${jCard('hombro','izquierdo')}
+      ${jCard('codo','derecho')}${jCard('codo','izquierdo')}
+    </div></div>
+    <div class="tc" id="tc-inf"><div class="jgrid">
+      ${jCard('cadera','derecho')}${jCard('cadera','izquierdo')}
+      ${jCard('rodilla','derecho')}${jCard('rodilla','izquierdo')}
+      ${jCard('tobillo','derecho')}${jCard('tobillo','izquierdo')}
+    </div></div>
     <div class="tc" id="tc-reg">
       ${regs.length
         ?`<div class="tbl-wrap"><table>
             <thead><tr><th>Hora</th><th>Lado</th><th>Región</th><th>Articulación</th><th>Ejercicio</th><th>Ángulo</th></tr></thead>
             <tbody>${regs.map(r=>`<tr>
-              <td><span class="badge">${r.timestamp}</span></td>
-              <td>${r.lado}</td>
+              <td><span class="badge">${r.timestamp}</span></td><td>${r.lado}</td>
               <td><span class="${r.region==='superior'?'rt-sup':'rt-inf'}">${r.region}</span></td>
-              <td>${r.articulacion}</td>
-              <td>${r.ejercicio.replace(/_/g,' ')}</td>
+              <td>${r.articulacion}</td><td>${r.ejercicio.replace(/_/g,' ')}</td>
               <td style="color:var(--cyan);font-family:var(--mono);font-weight:600">${r.angulo}°</td>
             </tr>`).join('')}</tbody>
           </table></div>`
-        :`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-txt">Sin registros de movimiento</div></div>`
-      }
+        :`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-txt">Sin registros</div></div>`}
     </div>`;
-
   document.getElementById('det-acts').innerHTML=`
     <button class="btn btn-g" onclick="toggleForm()" style="flex:1">✏️ Asignar</button>
     <button class="btn btn-p" onclick="exportSes('${s.id}')" style="flex:1">⬇️ Exportar</button>
     <button class="btn btn-d" onclick="confirmDel('${s.id}')">🗑️</button>`;
 }
-
-function detTab(name){
-  ['sup','inf','reg'].forEach(n=>{
-    document.getElementById('tc-'+n).classList.toggle('on',n===name);
-    document.getElementById('tb-'+n).classList.toggle('on',n===name);
+function detTab(n){
+  ['sup','inf','reg'].forEach(x=>{
+    document.getElementById('tc-'+x).classList.toggle('on',x===n);
+    document.getElementById('tb-'+x).classList.toggle('on',x===n);
   });
 }
-function toggleForm(){ formOpen=!formOpen; renderDet(); }
+function toggleForm(){formOpen=!formOpen;renderDet();}
 function guardar(id){
-  const p=document.getElementById('fn').value.trim();
-  const n=document.getElementById('fno').value.trim();
-  updateSes(id,p,n); formOpen=false; renderDet(); renderSesList();
-  toast('✓ Paciente asignado',true);
+  updateSes(id,document.getElementById('fn').value.trim(),document.getElementById('fno').value.trim());
+  formOpen=false;renderDet();renderSesList();toast('✓ Paciente asignado',true);
 }
-function confirmDel(id){
-  if(confirm(`¿Borrar sesión #${id}?`)){ deleteSes(id); goBack(); }
-}
+function confirmDel(id){if(confirm(`¿Borrar sesión #${id}?`)){deleteSes(id);goBack();}}
 
-/* ═══════════════════════════════════════════════════
-   NAVEGACIÓN
-═══════════════════════════════════════════════════ */
+// ── NAVEGACIÓN ────────────────────────────────────
 let curScreen='cam';
 function goScreen(name){
-  ['cam','ses','det'].forEach(s=>{
-    document.getElementById('sc-'+s).classList.toggle('off',s!==name);
-  });
+  ['cam','ses','det'].forEach(s=>document.getElementById('sc-'+s).classList.toggle('off',s!==name));
   document.getElementById('nb-cam').classList.toggle('on',name==='cam');
   document.getElementById('nb-ses').classList.toggle('on',name==='ses'||name==='det');
   document.getElementById('botnav').classList.toggle('off',name==='det');
   if(name==='ses') renderSesList();
   curScreen=name;
 }
-function goBack(){
-  if(curScreen==='det') goScreen('ses');
-  else goScreen('cam');
-}
+function goBack(){goScreen(curScreen==='det'?'ses':'cam');}
 
-/* ═══════════════════════════════════════════════════
-   TOAST
-═══════════════════════════════════════════════════ */
+// ── TOAST / HELPERS ───────────────────────────────
 let tTimer;
 function toast(msg,green=false){
   const el=document.getElementById('toast');
-  el.textContent=msg; el.className='show'+(green?' g':'');
-  clearTimeout(tTimer); tTimer=setTimeout(()=>el.className='',2500);
+  el.textContent=msg;el.className='show'+(green?' g':'');
+  clearTimeout(tTimer);tTimer=setTimeout(()=>el.className='',2500);
 }
-
-/* ═══════════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════════ */
-function ldMsg(m){ document.getElementById('ld-msg').textContent=m; }
+function ldMsg(m){document.getElementById('ld-msg').textContent=m;}
 function setStatus(state,txt){
   document.getElementById('sDot').className='dot'+(state==='on'?' on':state==='warn'?' warn':'');
   document.getElementById('sTxt').textContent=txt;
 }
-
-// Teclado para uso en PC también
 document.addEventListener('keydown',e=>{
   if(e.key==='s'||e.key==='S') saveSession();
   if(e.key==='r'||e.key==='R') resetSession();
 });
 
-/* ═══════════════════════════════════════════════════
-   INICIO
-═══════════════════════════════════════════════════ */
+// ── INICIO ────────────────────────────────────────
 document.getElementById('ld').style.transition='opacity .4s';
-
 if(location.protocol!=='https:'&&location.hostname!=='localhost'&&location.hostname!=='127.0.0.1'){
   document.getElementById('ld').style.display='none';
   document.getElementById('https-err').style.display='flex';
