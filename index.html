@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
 <style>
-/* ── VARIABLES ── */
+/* VARIABLES */
 :root {
   --bg:#07080f; --bg1:#0c0f1a; --bg2:#111525; --bg3:#161c30;
   --line:#1c2640; --line2:#243050;
@@ -355,7 +355,7 @@ tbody tr:last-child td { border-bottom:none; }
         <line x1="10" y1="13" x2="8" y2="20"/><line x1="14" y1="13" x2="16" y2="20"/>
       </svg>
     </div>
-    <div><div class="logo-name">ROMAnalyzer</div><div class="logo-tag">Goniometría FullBody</div></div>
+    <div><div class="logo-name">ROMAnalyzer</div><div class="logo-tag">VISOR DE SESIONES</div></div>
     <div class="hd-right">
       <div class="chip"><div class="dot" id="sDot"></div><span id="sTxt">Iniciando</span></div>
     </div>
@@ -668,7 +668,7 @@ function onResults(res){
     }
     tick();renderAP();
   }else{
-    setStatus('warn','Sin persona');
+    setStatus('warn','Sin detectar');
     ctx.fillStyle='rgba(255,68,102,0.9)';
     ctx.font='bold 14px JetBrains Mono,monospace';
     ctx.textAlign='center';
