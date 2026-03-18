@@ -88,7 +88,7 @@ button { cursor:pointer; }
   margin-bottom:var(--nav-h);
 }
 
-/* Video CSS espejo → usuario se ve en espejo. Canvas sin CSS → JS maneja el espejo al dibujar */
+/* Video CSS espejo → se aplica dinámicamente por JS según la cámara activa */
 #vid { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
 #cvs { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 
@@ -103,6 +103,7 @@ button { cursor:pointer; }
 .fab:active { transform:scale(.92); }
 .fab-s { background:rgba(0,229,204,.15); border-color:rgba(0,229,204,.4); }
 .fab-r { background:rgba(255,68,102,.12); border-color:rgba(255,68,102,.3); }
+.fab-c { background:rgba(77,184,255,.15); border-color:rgba(77,184,255,.4); }
 
 /* Angle panel */
 .ap {
@@ -369,6 +370,7 @@ tbody tr:last-child td { border-bottom:none; }
     <div class="fab-col">
       <button class="fab fab-s" onclick="saveSession()" title="Guardar (S)">💾</button>
       <button class="fab fab-r" onclick="resetSession()" title="Reset (R)">🔄</button>
+      <button class="fab fab-c" onclick="switchCam()" title="Cambiar cámara" id="fab-flip">🔁</button>
     </div>
 
     <div class="ap">
@@ -632,7 +634,7 @@ function importJSON(inp){
 const vid=document.getElementById('vid');
 const cvs=document.getElementById('cvs');
 const ctx=cvs.getContext('2d');
-let pose,cameraOn=false,poseReady=false;
+let pose,cameraOn=false,poseReady=false,facingMode='user';
 
 function onResults(res){
   ctx.clearRect(0,0,cvs.width,cvs.height);
@@ -640,7 +642,7 @@ function onResults(res){
   if(lm&&lm.length>0){
     setStatus('on','Detectando');
     ctx.save();
-    ctx.translate(cvs.width,0);ctx.scale(-1,1);
+    if(facingMode==='user'){ctx.translate(cvs.width,0);ctx.scale(-1,1);}
     if(window.drawConnectors&&window.POSE_CONNECTIONS){
       drawConnectors(ctx,lm,POSE_CONNECTIONS,{color:'rgba(30,60,200,0.85)',lineWidth:3});
       drawLandmarks(ctx,lm,{color:'#00e5cc',fillColor:'#00e5cc',lineWidth:1,radius:5});
@@ -686,20 +688,41 @@ async function initPose(){
   ldMsg('Activando cámara…');
   await startCam();
 }
-async function startCam(){
+async function startCam(mode){
+  if(mode) facingMode=mode;
   let stream=null;
-  for(const c of [{video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}},{video:true}]){
+  for(const c of [{video:{facingMode:facingMode,width:{ideal:640},height:{ideal:480}}},{video:true}]){
     try{stream=await navigator.mediaDevices.getUserMedia(c);break;}catch(e){}
   }
   if(!stream) throw new Error('No se pudo acceder a la cámara');
   vid.srcObject=stream;
   await new Promise(res=>{vid.onloadedmetadata=res;});
   await vid.play();
+  // Espejo CSS solo para cámara frontal; trasera no necesita espejo
+  vid.style.transform=facingMode==='user'?'scaleX(-1)':'scaleX(1)';
   cameraOn=true;poseReady=true;
   document.getElementById('ld').style.opacity='0';
   setTimeout(()=>document.getElementById('ld').style.display='none',400);
   setStatus('warn','Buscando…');
   loop();
+}
+async function switchCam(){
+  const btn=document.getElementById('fab-flip');
+  if(btn) btn.style.pointerEvents='none';
+  cameraOn=false;
+  if(vid.srcObject) vid.srcObject.getTracks().forEach(t=>t.stop());
+  const newMode=facingMode==='user'?'environment':'user';
+  setStatus('warn','Cambiando cámara…');
+  try{
+    await startCam(newMode);
+    toast(newMode==='environment'?'📷 Cámara trasera':'🤳 Cámara frontal',true);
+  }catch(e){
+    // Fallback: volver a la cámara anterior si falla
+    cameraOn=true;
+    toast('⚠ No se pudo cambiar de cámara');
+    await startCam(facingMode==='user'?'environment':'user');
+  }
+  if(btn) btn.style.pointerEvents='';
 }
 async function loop(){
   if(!cameraOn) return;
